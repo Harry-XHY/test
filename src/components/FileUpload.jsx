@@ -7,16 +7,18 @@ export default function FileUpload({ onFileProcessed, disabled }) {
 
   const validateFile = (file) => {
     const ext = file.name.split('.').pop()?.toLowerCase()
-    const validExts = ['pdf', 'docx', 'xlsx', 'xls', 'csv']
+    const validExts = ['pdf', 'docx', 'xlsx', 'xls', 'csv', 'md', 'markdown', 'txt']
     const validTypes = [
       'application/pdf',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'application/vnd.ms-excel',
       'text/csv',
+      'text/markdown',
+      'text/plain',
     ]
     if (!validTypes.includes(file.type) && !validExts.includes(ext)) {
-      return '不支持的格式，请上传 PDF、DOCX、XLSX、XLS 或 CSV 文件'
+      return '不支持的格式，请上传 PDF、DOCX、XLSX、CSV、MD 或 TXT 文件'
     }
     if (file.size > 10 * 1024 * 1024) return '文件大小超过 10MB 限制'
     return null
@@ -76,13 +78,13 @@ export default function FileUpload({ onFileProcessed, disabled }) {
           拖拽文件到此处，或点击选择
         </p>
         <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-          支持 PDF / DOCX / XLSX / CSV 格式，最大 10MB
+          支持 PDF / DOCX / XLSX / CSV / MD / TXT，最大 10MB
         </p>
 
         <input
           ref={inputRef}
           type="file"
-          accept=".pdf,.docx,.xlsx,.xls,.csv"
+          accept=".pdf,.docx,.xlsx,.xls,.csv,.md,.markdown,.txt"
           className="hidden"
           onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
         />
