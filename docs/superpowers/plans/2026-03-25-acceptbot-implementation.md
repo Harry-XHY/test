@@ -6,7 +6,7 @@
 
 **Architecture:** React SPA（Bolt.new/Cursor 生成）+ Supabase（Auth + DB + Storage）+ DeepSeek API（AI 生成验收清单）。前端部署在 Vercel，后端全部使用 Supabase 云服务，无需自建服务器。
 
-**Tech Stack:** React + TailwindCSS, Supabase (PostgreSQL + Auth + Storage), DeepSeek API, pdf-parse, jsPDF
+**Tech Stack:** React + TailwindCSS, Supabase (PostgreSQL + Auth + Storage + Edge Functions), DeepSeek API, pdfjs-dist, window.print() PDF 导出
 
 **适配说明：** 本计划面向非开发背景用户，使用 Bolt.new / Cursor 等 AI 编程工具执行。每个任务描述了「要实现什么」和「关键代码/配置」，用户可将任务描述直接喂给 AI 工具生成代码。
 
@@ -23,7 +23,7 @@ acceptbot/
 │   ├── main.jsx                   # 入口文件
 │   ├── lib/
 │   │   ├── supabase.js            # Supabase 客户端初始化
-│   │   ├── deepseek.js            # DeepSeek API 调用封装
+│   │   ├── deepseek.js            # 调用 Edge Function 封装
 │   │   └── pdf-parser.js          # PDF 文本提取
 │   ├── components/
 │   │   ├── Layout.jsx             # 页面布局（导航栏 + 内容区）
@@ -31,6 +31,7 @@ acceptbot/
 │   │   ├── ChecklistView.jsx      # 验收清单展示 + 编辑
 │   │   ├── ChecklistItem.jsx      # 单个检查项（勾选 + 备注）
 │   │   ├── ReportExport.jsx       # 导出报告按钮
+│   │   ├── ReportView.jsx         # 可打印的报告页面
 │   │   └── FeedbackWidget.jsx     # 反馈入口组件
 │   ├── pages/
 │   │   ├── LoginPage.jsx          # 登录页（手机号 + 验证码）
@@ -44,10 +45,13 @@ acceptbot/
 │   └── prompts/
 │       └── acceptance-prompt.js   # AI prompt 模板（核心资产）
 ├── supabase/
-│   └── migrations/
-│       └── 001_initial_schema.sql # 数据库建表
+│   ├── migrations/
+│   │   └── 001_initial_schema.sql # 数据库建表
+│   └── functions/
+│       └── generate-checklist/
+│           └── index.ts           # Edge Function（调用 DeepSeek）
 ├── package.json
-├── .env.local                     # 环境变量（API keys）
+├── .env.local                     # 环境变量（不含 API Key）
 ├── vercel.json                    # Vercel 配置
 └── README.md
 ```
@@ -256,7 +260,7 @@ ${docContent}`;
 ```bash
 VITE_SUPABASE_URL=你的Supabase项目URL
 VITE_SUPABASE_ANON_KEY=你的Supabase匿名Key
-VITE_DEEPSEEK_API_KEY=你的DeepSeek_API_Key
+# 注意：DeepSeek API Key 不放前端，会通过 Supabase Edge Function 调用（见 Task 5）
 ```
 
 - [ ] **Step 3: 初始化 Supabase 客户端**
@@ -366,11 +370,24 @@ Supabase Dashboard → Storage → Create bucket:
 - 文件大小限制: 5MB
 - 允许的 MIME 类型: `application/pdf`
 
-- [ ] **Step 3: 保存 migration 文件到代码库**
+- [ ] **Step 3: 开发阶段临时禁用 RLS**
+
+数据库的 RLS（行级安全）策略依赖用户登录，但登录功能在 Task 9 才实现。开发期间先禁用 RLS，否则 Task 4-8 的所有数据操作都会被拒绝：
+
+```sql
+-- 开发阶段临时禁用（Task 9 完成后重新启用）
+alter table documents disable row level security;
+alter table checklists disable row level security;
+alter table verifications disable row level security;
+```
+
+**重要：Task 9 完成后必须重新启用 RLS，否则所有用户数据互相可见！**
+
+- [ ] **Step 4: 保存 migration 文件到代码库**
 
 将上述 SQL 保存为 `supabase/migrations/001_initial_schema.sql`，方便版本管理。
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add supabase/
@@ -469,25 +486,121 @@ git commit -m "feat: add PDF upload and text extraction"
 
 ## Task 5: AI 验收清单生成（第 5-6 周）
 
-**目标：** 将提取的文本发送给 DeepSeek API，生成结构化验收清单。
+**目标：** 将提取的文本发送给 DeepSeek API，生成结构化验收清单。API Key 通过 Supabase Edge Function 保护，不暴露在前端。
 
 **Files:**
-- Create: `src/lib/deepseek.js`
+- Create: `supabase/functions/generate-checklist/index.ts` — Edge Function（服务端调用 DeepSeek）
+- Create: `src/lib/deepseek.js` — 前端调用 Edge Function 的封装
 - Modify: `src/pages/UploadPage.jsx` — 上传后触发 AI 生成
 
-- [ ] **Step 1: 封装 DeepSeek API 调用**
+- [ ] **Step 1: 创建 Supabase Edge Function**
 
-```javascript
-// src/lib/deepseek.js
-import { SYSTEM_PROMPT, USER_PROMPT_TEMPLATE } from '../prompts/acceptance-prompt'
+在 Supabase Dashboard → Edge Functions 中创建函数，或使用 CLI：
 
-const API_URL = 'https://api.deepseek.com/v1/chat/completions'
-const API_KEY = import.meta.env.VITE_DEEPSEEK_API_KEY
+```bash
+# 安装 Supabase CLI（如未安装）
+npm install -g supabase
 
-const MAX_CHUNK_LENGTH = 12000 // 单次请求的最大文本长度
+# 初始化（在项目目录中）
+supabase init
 
-// 分段处理长文档
+# 创建 Edge Function
+supabase functions new generate-checklist
+```
+
+编辑 `supabase/functions/generate-checklist/index.ts`：
+
+```typescript
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+
+const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions'
+const DEEPSEEK_API_KEY = Deno.env.get('DEEPSEEK_API_KEY') // 安全存储在服务端
+
+const SYSTEM_PROMPT = `你是一个拥有 10 年经验的软件测试专家，擅长从需求文档中提取验收测试清单。
+
+你的核心能力：
+- 准确识别功能模块和测试点
+- 自动补充边界条件、异常场景、安全检查
+- 合理标注优先级
+
+输出规则：
+- 严格按 JSON 格式输出
+- 每个模块 5-15 个检查项
+- P0 占比约 30%，P1 约 50%，P2 约 20%
+- 必须包含至少 2 个安全相关检查项`
+
+serve(async (req) => {
+  // CORS 处理
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', {
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST',
+        'Access-Control-Allow-Headers': 'authorization, content-type',
+      }
+    })
+  }
+
+  try {
+    const { docText } = await req.json()
+
+    if (!docText || docText.length === 0) {
+      return new Response(JSON.stringify({ error: '文档内容为空' }), { status: 400 })
+    }
+
+    // 分段处理长文档
+    const chunks = splitIntoChunks(docText)
+    const allModules = []
+
+    for (const chunk of chunks) {
+      const response = await fetch(DEEPSEEK_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${DEEPSEEK_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: 'deepseek-chat',
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'user', content: buildUserPrompt(chunk) }
+          ],
+          temperature: 0.3,
+          response_format: { type: 'json_object' }
+        })
+      })
+
+      if (!response.ok) {
+        const errText = await response.text()
+        throw new Error(`DeepSeek API 错误: ${response.status} - ${errText}`)
+      }
+
+      const data = await response.json()
+      const content = data.choices[0].message.content
+
+      try {
+        const result = JSON.parse(content)
+        allModules.push(...result.modules)
+      } catch {
+        throw new Error('AI 返回的格式不正确，请重试')
+      }
+    }
+
+    const merged = mergeModules(allModules)
+
+    return new Response(JSON.stringify(merged), {
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+    })
+  } catch (error) {
+    return new Response(
+      JSON.stringify({ error: error.message || '生成失败，请重试' }),
+      { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
+    )
+  }
+})
+
 function splitIntoChunks(text) {
+  const MAX_CHUNK_LENGTH = 12000
   if (text.length <= MAX_CHUNK_LENGTH) return [text]
 
   const chunks = []
@@ -506,35 +619,30 @@ function splitIntoChunks(text) {
   return chunks
 }
 
-export async function generateChecklist(docText) {
-  const chunks = splitIntoChunks(docText)
-  const allModules = []
+function buildUserPrompt(chunk) {
+  return `请根据以下需求文档生成验收测试清单。
 
-  for (const chunk of chunks) {
-    const response = await fetch(API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${API_KEY}`
-      },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: USER_PROMPT_TEMPLATE(chunk) }
-        ],
-        temperature: 0.3,
-        response_format: { type: 'json_object' }
-      })
-    })
+输出 JSON 格式：
+{
+  "modules": [
+    {
+      "name": "模块名称",
+      "items": [
+        {
+          "id": "1.1",
+          "description": "检查项描述",
+          "priority": "P0|P1|P2",
+          "category": "functional|boundary|security|performance",
+          "expected_result": "预期结果"
+        }
+      ]
+    }
+  ]
+}
 
-    const data = await response.json()
-    const result = JSON.parse(data.choices[0].message.content)
-    allModules.push(...result.modules)
-  }
-
-  // 合并并去重模块
-  return mergeModules(allModules)
+需求文档内容：
+---
+${chunk}`
 }
 
 function mergeModules(modules) {
@@ -548,8 +656,6 @@ function mergeModules(modules) {
   }
 
   const result = Array.from(merged.values())
-
-  // 重新编号
   result.forEach((mod, mi) => {
     mod.items.forEach((item, ii) => {
       item.id = `${mi + 1}.${ii + 1}`
@@ -567,6 +673,44 @@ function mergeModules(modules) {
     }
   }
 }
+```
+
+- [ ] **Step 2: 设置 Edge Function 环境变量**
+
+```bash
+# 在 Supabase Dashboard → Edge Functions → Secrets 中添加：
+# DEEPSEEK_API_KEY = 你的DeepSeek_API_Key
+
+# 或使用 CLI：
+supabase secrets set DEEPSEEK_API_KEY=你的Key
+```
+
+- [ ] **Step 3: 部署 Edge Function**
+
+```bash
+supabase functions deploy generate-checklist
+```
+
+- [ ] **Step 4: 前端封装调用**
+
+```javascript
+// src/lib/deepseek.js
+import { supabase } from './supabase'
+
+export async function generateChecklist(docText) {
+  const { data, error } = await supabase.functions.invoke('generate-checklist', {
+    body: { docText }
+  })
+
+  if (error) {
+    throw new Error(error.message || '生成失败，请重试')
+  }
+
+  return data
+}
+```
+
+这样 DeepSeek API Key 只存在于服务端，前端代码中完全不包含。
 ```
 
 - [ ] **Step 2: 在上传页面集成 AI 生成**
@@ -770,105 +914,150 @@ git commit -m "feat: add verification flow with pass/fail/skip and notes"
 
 ---
 
-## Task 8: PDF 报告导出（第 9-10 周）
+## Task 8: 验收报告导出（第 9-10 周）
 
-**目标：** 一键导出验收报告 PDF，包含汇总统计和逐项明细。
+**目标：** 一键导出验收报告 PDF，包含汇总统计、按模块通过率和逐项明细。
+
+**方案选择：** 使用 HTML 报告页面 + 浏览器 `window.print()` 生成 PDF。不用 jsPDF，因为 jsPDF 不原生支持中文，字体嵌入对非开发者来说坑太多。浏览器打印方案零依赖、天然支持中文。
 
 **Files:**
-- Create: `src/components/ReportExport.jsx`
-- Install: `jspdf`, `jspdf-autotable`
+- Create: `src/components/ReportExport.jsx` — 导出按钮
+- Create: `src/components/ReportView.jsx` — 可打印的报告页面
 
-- [ ] **Step 1: 安装 PDF 生成库**
+- [ ] **Step 1: 创建可打印的报告组件**
 
-```bash
-npm install jspdf jspdf-autotable
-```
-
-- [ ] **Step 2: 实现报告生成逻辑**
-
-```javascript
-// src/components/ReportExport.jsx
-import jsPDF from 'jspdf'
-import 'jspdf-autotable'
-
-export function generateReport(document, checklist, verifications) {
-  const doc = new jsPDF()
-
-  // 标题
-  doc.setFontSize(18)
-  doc.text('验收测试报告', 105, 20, { align: 'center' })
-
-  // 基本信息
-  doc.setFontSize(12)
-  doc.text(`文档: ${document.filename}`, 14, 35)
-  doc.text(`日期: ${new Date().toLocaleDateString('zh-CN')}`, 14, 42)
-
-  // 汇总统计
+```jsx
+// src/components/ReportView.jsx
+export function ReportView({ document, checklist, verifications }) {
   const passCount = verifications.filter(v => v.status === 'pass').length
   const failCount = verifications.filter(v => v.status === 'fail').length
   const skipCount = verifications.filter(v => v.status === 'skip').length
   const total = checklist.summary.total_items
+  const passRate = total > 0 ? Math.round(passCount / total * 100) : 0
 
-  doc.text(`总检查项: ${total}`, 14, 55)
-  doc.text(`通过: ${passCount} | 不通过: ${failCount} | 跳过: ${skipCount}`, 14, 62)
-  doc.text(`通过率: ${total > 0 ? Math.round(passCount / total * 100) : 0}%`, 14, 69)
+  return (
+    <div id="report-content" className="print-area p-8 bg-white text-black">
+      <h1 className="text-2xl font-bold text-center mb-6">验收测试报告</h1>
 
-  // 按模块的详细表格
-  let yPos = 80
-  for (const mod of checklist.modules) {
-    doc.setFontSize(14)
-    doc.text(mod.name, 14, yPos)
-    yPos += 8
+      {/* 基本信息 */}
+      <div className="mb-6 text-sm">
+        <p>文档：{document.filename}</p>
+        <p>日期：{new Date().toLocaleDateString('zh-CN')}</p>
+      </div>
 
-    const rows = mod.items.map(item => {
-      const v = verifications.find(v => v.item_id === item.id)
-      return [
-        item.id,
-        item.description,
-        item.priority,
-        v ? { pass: '通过', fail: '不通过', skip: '跳过', pending: '未验收' }[v.status] : '未验收',
-        v?.note || ''
-      ]
-    })
+      {/* 汇总统计 */}
+      <div className="mb-6 p-4 bg-gray-50 rounded">
+        <h2 className="font-bold mb-2">汇总</h2>
+        <p>总检查项：{total} | 通过：{passCount} | 不通过：{failCount} | 跳过：{skipCount}</p>
+        <p className="text-lg font-bold">整体通过率：{passRate}%</p>
+      </div>
 
-    doc.autoTable({
-      startY: yPos,
-      head: [['编号', '检查项', '优先级', '结果', '备注']],
-      body: rows,
-      styles: { fontSize: 9 },
-      headStyles: { fillColor: [59, 130, 246] }
-    })
+      {/* 按模块明细 */}
+      {checklist.modules.map((mod, mi) => {
+        const modItems = mod.items
+        const modVerifications = modItems.map(item =>
+          verifications.find(v => v.item_id === item.id)
+        )
+        const modPass = modVerifications.filter(v => v?.status === 'pass').length
+        const modRate = modItems.length > 0 ? Math.round(modPass / modItems.length * 100) : 0
 
-    yPos = doc.lastAutoTable.finalY + 15
-    if (yPos > 260) {
-      doc.addPage()
-      yPos = 20
-    }
-  }
-
-  doc.save(`验收报告_${document.filename}_${new Date().toISOString().split('T')[0]}.pdf`)
+        return (
+          <div key={mi} className="mb-6 break-inside-avoid">
+            <h2 className="font-bold text-lg mb-1">
+              {mod.name}
+              <span className="text-sm font-normal ml-2">（通过率：{modRate}%）</span>
+            </h2>
+            <table className="w-full text-sm border-collapse border">
+              <thead>
+                <tr className="bg-blue-500 text-white">
+                  <th className="border p-2 w-12">编号</th>
+                  <th className="border p-2">检查项</th>
+                  <th className="border p-2 w-12">优先级</th>
+                  <th className="border p-2 w-16">结果</th>
+                  <th className="border p-2">备注</th>
+                </tr>
+              </thead>
+              <tbody>
+                {modItems.map((item, ii) => {
+                  const v = modVerifications[ii]
+                  const statusMap = { pass: '通过', fail: '不通过', skip: '跳过', pending: '未验收' }
+                  const statusColor = { pass: 'text-green-600', fail: 'text-red-600', skip: 'text-gray-400' }
+                  return (
+                    <tr key={ii}>
+                      <td className="border p-2">{item.id}</td>
+                      <td className="border p-2">{item.description}</td>
+                      <td className="border p-2 text-center">{item.priority}</td>
+                      <td className={`border p-2 text-center ${statusColor[v?.status] || ''}`}>
+                        {statusMap[v?.status] || '未验收'}
+                      </td>
+                      <td className="border p-2">{v?.note || ''}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 ```
 
-注意：jsPDF 默认不支持中文，需要嵌入中文字体。用 Cursor 搜索「jsPDF 中文字体」获取解决方案（通常是加载一个中文字体文件）。
+- [ ] **Step 2: 添加打印样式**
 
-- [ ] **Step 3: 在清单页面添加导出按钮**
+在全局 CSS 中添加打印样式：
 
-修改 ChecklistPage，添加「导出报告」按钮：
-- 验收完成后才可点击
-- 点击后生成并下载 PDF
+```css
+/* 添加到 src/index.css 或 App.css */
+@media print {
+  body * { visibility: hidden; }
+  .print-area, .print-area * { visibility: visible; }
+  .print-area { position: absolute; left: 0; top: 0; width: 100%; }
+  .no-print { display: none !important; }
+}
+```
 
-- [ ] **Step 4: 测试报告导出**
+- [ ] **Step 3: 实现导出按钮**
 
-- 完成一份完整验收后导出
-- 检查 PDF 内容：中文是否正常显示、表格排版、统计数据是否准确
-- 测试多模块长报告是否正确分页
+```jsx
+// src/components/ReportExport.jsx
+export function ReportExport({ disabled }) {
+  const handleExport = () => {
+    window.print()  // 浏览器弹出打印对话框，用户选择「另存为 PDF」
+  }
 
-- [ ] **Step 5: Commit**
+  return (
+    <button
+      onClick={handleExport}
+      disabled={disabled}
+      className="no-print bg-blue-500 text-white px-4 py-2 rounded disabled:opacity-50"
+    >
+      导出报告 (PDF)
+    </button>
+  )
+}
+```
+
+- [ ] **Step 4: 在清单页面集成报告**
+
+修改 ChecklistPage：
+- 添加「导出报告」按钮（验收完成后可点击）
+- 点击后渲染 ReportView 组件并调用 `window.print()`
+- 用户在打印对话框中选择「另存为 PDF」即可保存
+
+- [ ] **Step 5: 测试报告导出**
+
+- 完成一份完整验收后点击导出
+- 确认中文正常显示（使用浏览器打印，天然支持中文）
+- 确认每个模块有独立的通过率统计
+- 确认表格排版和分页正常
+
+- [ ] **Step 6: Commit**
 
 ```bash
-git add src/components/ReportExport.jsx src/pages/ChecklistPage.jsx
-git commit -m "feat: add PDF report export with summary and details"
+git add src/components/ReportExport.jsx src/components/ReportView.jsx src/pages/ChecklistPage.jsx
+git commit -m "feat: add printable report with per-module pass rates"
 ```
 
 ---
@@ -888,7 +1077,17 @@ Supabase Dashboard → Authentication → Providers:
 - 开启 Phone provider
 - 配置短信服务商（Supabase 内置 Twilio，或对接阿里云短信）
 
-备选方案：如果短信对接复杂，MVP 阶段可先用邮箱 + 密码登录，后续升级为手机号。
+备选方案：如果短信对接复杂，MVP 阶段可先用**邮箱 + 密码登录**（Supabase 默认支持，零配置），后续升级为手机号。邮箱登录的代码改动很小：
+
+```javascript
+// 邮箱登录（备选方案，替换 signInWithPhone 和 verifyOtp）
+const signUp = async (email, password) => {
+  return await supabase.auth.signUp({ email, password })
+}
+const signIn = async (email, password) => {
+  return await supabase.auth.signInWithPassword({ email, password })
+}
+```
 
 - [ ] **Step 2: 实现认证 hook**
 
@@ -943,7 +1142,20 @@ export function useAuth() {
 
 修改 App.jsx，未登录用户只能访问登录页和隐私协议页，其他页面需登录。
 
-- [ ] **Step 5: 测试登录流程**
+- [ ] **Step 5: 重新启用 RLS**
+
+**关键步骤！** Task 3 中临时禁用了 RLS，现在认证功能就位，必须重新启用：
+
+```sql
+-- 在 Supabase SQL Editor 中执行
+alter table documents enable row level security;
+alter table checklists enable row level security;
+alter table verifications enable row level security;
+```
+
+启用后测试：登录用户只能看到自己的数据。
+
+- [ ] **Step 6: 测试登录流程**
 
 - 发送验证码是否收到
 - 登录成功后是否跳转
