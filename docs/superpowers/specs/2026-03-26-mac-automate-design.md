@@ -39,13 +39,19 @@ scripts/automate/
 
 **职责：** 接收自然语言或结构化指令，路由到对应模块。
 
-**路由规则：**
+**解析算法：** 基于正则匹配 + 优先级，按顺序匹配，首个命中生效：
 
-| 关键词 | 目标模块 | 动作 |
-|--------|----------|------|
-| 微信、发消息、发给 | wechat | send_message |
-| 打开网页、访问、抓取、截图、填表 | browser | open_url / scrape / screenshot / fill_form |
-| 打开应用、点击、输入 | app | activate / click / type_text |
+| 优先级 | 正则模式 | 目标模块 | 参数提取 |
+|--------|----------|----------|----------|
+| 1 | `(发微信|微信发|发给).+` | wechat | 提取联系人（别名→真名映射）和消息体 |
+| 2 | `(打开网页|访问|抓取|截图|填表).+` | browser | 提取 URL 和可选参数 |
+| 3 | `(打开|启动|切换到).+应用|打开\s+\w+` | app | 提取应用名 |
+
+**参数提取示例：**
+- `"给媳妇发微信 你在干嘛"` → `wechat.send_message(contact="媳妇", message="你在干嘛")`
+- 解析规则：「给/发给」后为联系人，「发微信」后为消息体；使用正则 `给?(.+?)发微信\s+(.+)` 提取
+
+**异步桥接：** router.py 为同步 CLI 入口，调用 browser.py 的 async 函数时使用 `asyncio.run()` 包装。
 
 **CLI 入口：**
 
@@ -76,15 +82,27 @@ def send_message(contact: str, message: str) -> dict:
     """
 ```
 
+**联系人别名映射：** 使用 `scripts/automate/contacts.json` 存储别名：
+
+```json
+{
+  "媳妇": "张三",
+  "老板": "李四",
+  "妈": "妈妈"
+}
+```
+
+路由时自动将别名转为真实联系人名。无映射则直接使用原文搜索。
+
 **关键细节：**
-- 使用 `pyautogui.locateOnScreen()` 辅助定位搜索结果
-- 中文输入通过 `pyperclip` + Cmd+V 粘贴（避免输入法问题）
+- 优先使用 AppleScript accessibility API（`System Events`）定位 UI 元素，`pyautogui.locateOnScreen()` 仅作 fallback
+- 中文输入通过 `clipboard_paste()`（带剪贴板保存/恢复）粘贴
 - 发送前打印确认信息，支持 `--no-confirm` 跳过
 
 **局限：**
 - 依赖微信桌面版已登录且窗口可访问
-- 屏幕分辨率/缩放变化可能影响定位
-- 同名联系人需额外处理
+- 屏幕分辨率/缩放变化可能影响 fallback 图像定位
+- 同名联系人取搜索结果第一个匹配项
 
 ### 3. browser.py — 浏览器自动化
 
@@ -109,10 +127,12 @@ async def run_script(url: str, script: str) -> dict:
     """在页面上执行自定义 JavaScript"""
 ```
 
+**fill_form 字段说明：** `fields` 使用 Playwright CSS 选择器作为 key，支持 `input`/`textarea`/`select` 元素。下拉框使用 `select_option()`，复选框使用 `check()`。填写完成后不自动提交，需显式传 `submit_selector` 参数。
+
 **特性：**
 - 默认使用 Chromium，支持切换 Firefox/WebKit
 - 支持 headless 和 headed 模式（默认 headed，方便观察）
-- Cookie/session 持久化，避免重复登录
+- v1 不含 Cookie 持久化，后续扩展中实现
 
 ### 4. app.py — 通用 App 操作
 
@@ -155,33 +175,34 @@ def take_screenshot(path: str = None) -> str:
     """全屏截图，返回保存路径"""
 
 def clipboard_paste(text: str):
-    """复制文本到剪贴板并粘贴（解决中文输入问题）"""
+    """保存当前剪贴板 → 复制文本 → Cmd+V 粘贴 → 恢复原剪贴板"""
+
+def ensure_logs_dir():
+    """确保 logs/ 目录存在，不存在则创建"""
 ```
 
 ## Claude Code 集成
 
-### Hook 配置（自动触发）
+### Hook 配置（自动触发）— TBD
 
-在 `.claude/settings.local.json` 中添加 hook，当用户消息包含特定意图时自动调用 router.py：
+Hook 自动触发需要验证 Claude Code 实际 hook API 格式。实现时需做一个 spike 确认：
+1. Claude Code hook 是否支持用户消息匹配
+2. 如果不支持，fallback 方案为仅使用 Slash 命令 + Claude 主动调用 Bash 执行 router.py
 
-```json
-{
-  "hooks": {
-    "UserMessage": [
-      {
-        "match": "发微信|微信发|打开网页|浏览器|截图|打开.*应用",
-        "command": "python scripts/automate/router.py \"$MESSAGE\""
-      }
-    ]
-  }
-}
-```
-
-> 注：Hook 的具体配置格式以 Claude Code 实际支持的 hook API 为准，实现时需验证。
+**Fallback 方案：** 不配置 hook，而是在 CLAUDE.md 的技能路由表中添加 automate 相关意图，Claude 识别意图后主动执行 `python scripts/automate/router.py "..."` 命令。
 
 ### Slash 命令（手动触发）
 
-创建 skill 文件实现 slash 命令：
+在 `skills/` 目录下创建 skill 文件：
+
+```
+skills/
+├── wechat/SKILL.md      # /wechat slash 命令
+├── browser/SKILL.md      # /browser slash 命令
+└── app/SKILL.md          # /app slash 命令
+```
+
+每个 SKILL.md 包含命令说明和参数格式，触发后调用 router.py 执行。
 
 - `/wechat <联系人> <消息>` — 发微信消息
 - `/browser open <url>` — 打开网页
@@ -194,8 +215,11 @@ def clipboard_paste(text: str):
 
 ### 需新安装
 
+通过项目 `pyproject.toml` 管理，使用 `uv` 安装：
+
 ```bash
-pip3 install pyautogui pyperclip pyobjc-framework-Quartz
+uv add pyautogui pyperclip pyobjc-framework-Quartz
+uv sync
 ```
 
 ### 已有
@@ -223,6 +247,23 @@ pip3 install pyautogui pyperclip pyobjc-framework-Quartz
 - 联系人搜索无结果 → 返回错误提示，不执行发送
 - 网页加载超时 → 返回超时错误，附带已加载内容
 - App 未安装 → 返回明确错误信息
+
+## 测试计划
+
+### 单元测试（pytest）
+- **router.py：** 测试意图解析、参数提取、优先级匹配、别名映射
+- **utils.py：** 测试 clipboard 保存/恢复、日志写入、目录创建
+
+### 集成烟测（手动）
+- **wechat：** 发送测试消息给自己（文件传输助手）
+- **browser：** 打开网页 + 截图 + 抓取标题
+- **app：** 打开 Finder + 激活窗口
+
+### 运行方式
+
+```bash
+pytest scripts/automate/tests/
+```
 
 ## 后续扩展
 
