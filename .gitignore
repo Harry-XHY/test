@@ -3,3 +3,26 @@ dist/
 .env.local
 .DS_Store
 test-results/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+
+# Docker volumes
+pgdata/
+redisdata/
+
+# Scrapy
+*.json.bak
+scrapy_output/
+
+# mac-automate logs
+scripts/automate/logs/
