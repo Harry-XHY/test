@@ -1,8 +1,169 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
 @import "tailwindcss";
 
-body {
+:root {
+  --bg: #0a0e14;
+  --bg-app: radial-gradient(circle at top left, #111A2E 0%, #0B1220 100%);
+  --card: rgba(255, 255, 255, 0.06);
+  --card-2: rgba(0, 0, 0, 0.2);
+  --line: rgba(255, 255, 255, 0.1);
+  --text: #f1f3fc;
+  --text-secondary: #a8abb3;
+  --muted: #72757d;
+  --muted-2: #44484f;
+  --primary: #b6a0ff;
+  --primary-dim: #7e51ff;
+  --secondary: #7c98ff;
+  --blue: #5B8CFF;
+  --blue-2: #7A7CFF;
+  --blue-light: #b3c1ff;
+  --blue-bg: rgba(255, 255, 255, 0.1);
+  --purple: #8b5cf6;
+  --purple-light: #c4b5fd;
+  --purple-bg: rgba(139,92,246,0.2);
+  --green: #22c55e;
+  --green-light: #d1fae5;
+  --green-bg: linear-gradient(180deg, rgba(34,197,94,0.08), rgba(34,197,94,0.03));
+  --green-border: rgba(34,197,94,0.18);
+  --shadow: 0 20px 40px rgba(2, 8, 23, 0.45);
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background: #0f172a;
-  color: #e2e8f0;
+  padding: 0;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  color: var(--text);
+  background: var(--bg-app);
+  /* Prevent iOS bounce/scroll when keyboard opens */
+  position: fixed;
+  width: 100%;
+}
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+.text-gradient {
+  background: linear-gradient(135deg, #b6a0ff 0%, #7c98ff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: background 0.3s, border-color 0.3s;
+}
+
+.glass-card:hover, .glass-card:active {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+@keyframes pulse-red {
+  0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+  70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+.pulse-active {
+  animation: pulse-red 2s infinite;
+}
+
+/* ===== Fortune Modal ===== */
+.fortune-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fortune-fade-in 0.3s ease-out;
+}
+
+@keyframes fortune-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.fortune-card {
+  width: 180px;
+  height: 260px;
+  perspective: 1000px;
+  cursor: pointer;
+}
+
+.fortune-card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.6s ease-out;
+  transform-style: preserve-3d;
+}
+
+.fortune-card-inner.flipped {
+  transform: rotateY(180deg);
+}
+
+.fortune-front,
+.fortune-back {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fortune-front {
+  background: linear-gradient(135deg, #7e51ff, #5B8CFF);
+  box-shadow: 0 8px 32px rgba(126, 81, 255, 0.3);
+}
+
+.fortune-back {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(182, 160, 255, 0.3);
+  box-shadow: 0 8px 32px rgba(126, 81, 255, 0.15);
+  transform: rotateY(180deg);
+  padding: 24px 20px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fortune-card-inner {
+    transition: none;
+    transform-style: flat;
+  }
+  .fortune-front,
+  .fortune-back {
+    backface-visibility: visible;
+  }
+  .fortune-front {
+    opacity: 1;
+  }
+  .fortune-back {
+    opacity: 0;
+    transform: none;
+  }
+  .fortune-card-inner.flipped .fortune-front {
+    opacity: 0;
+  }
+  .fortune-card-inner.flipped .fortune-back {
+    opacity: 1;
+  }
+  .fortune-overlay {
+    animation: none;
+  }
 }
