@@ -23,7 +23,7 @@ async function callMergeApi(systemPrompt, userContent) {
   const config = getConfig()
   const body = {
     model: config.model,
-    max_tokens: 16384,
+    max_tokens: 32768,
     system: systemPrompt,
     messages: [{ role: 'user', content: userContent }],
   }
