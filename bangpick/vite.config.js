@@ -15,6 +15,18 @@ export default defineConfig({
         secure: false,
         rewrite: () => '/anthropic/v1/messages',
       },
+      '/api/ip-location': {
+        target: 'https://ipinfo.io',
+        changeOrigin: true,
+        secure: false,
+        rewrite: () => '/json',
+      },
+      '/api/geocode': {
+        target: 'https://nominatim.openstreetmap.org',
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path.replace('/api/geocode', ''),
+      },
     },
   },
 })

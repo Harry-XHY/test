@@ -10,54 +10,79 @@ import { saveDecision } from '../lib/storage'
 import { getRandomContent } from '../lib/scenarios'
 import { requestLocation, getLocation, formatLocation } from '../lib/location'
 
+/* ===== Scenario Icons ===== */
+const SCENARIO_ICONS = {
+  '🍜': 'restaurant', '☕': 'local_cafe', '🍺': 'nightlife', '🎁': 'redeem',
+  '🛒': 'shopping_cart', '🎮': 'sports_esports', '🎬': 'movie', '👗': 'checkroom',
+  '🧥': 'dry_cleaning', '🚗': 'directions_car', '✈️': 'flight', '💼': 'work',
+  '📚': 'school', '💪': 'fitness_center', '🏠': 'home', '👫': 'group',
+  '💰': 'account_balance_wallet', '🐱': 'pets', '💇': 'content_cut', '📱': 'smartphone',
+}
+
+const SCENARIO_COLORS = [
+  'var(--primary)', 'var(--secondary)', 'var(--tertiary)', '#22c55e',
+]
+
 /* ===== Landing View ===== */
 function LandingView({ scenarios, examples, onFill, onOpenFortune }) {
   return (
-    <div className="space-y-10">
+    <div>
       {/* Hero */}
-      <section className="space-y-3">
-        <h2 className="text-[34px] font-bold leading-tight tracking-tight">
-          纠结的时候，<span className="text-gradient">交给我 ⚡</span>
+      <section className="mb-10">
+        <h2 className="text-4xl md:text-6xl font-extrabold tracking-tight mb-4 leading-tight">
+          纠结的时候，<br />
+          <span className="text-gradient">交给我 ⚡</span>
         </h2>
-        <p className="text-sm text-[var(--text-secondary)] opacity-70 font-medium leading-relaxed">
-          告诉我你的候选项和偏好，我会帮你更快做决定
+        <p className="text-[var(--text-secondary)] text-lg font-medium max-w-lg opacity-80">
+          结合高维度算力与感知，为您在迷雾中划破决策的微光。
         </p>
       </section>
 
       {/* Daily Fortune */}
       <FortuneCard onOpen={onOpenFortune} />
 
-      {/* Quick Scenes */}
-      <section className="space-y-4">
-        <div className="flex justify-between items-end">
-          <h3 className="text-[var(--text)] font-semibold">快速场景</h3>
-          <span className="flex items-center gap-1 text-xs text-[var(--primary)]">
-            <span className="material-symbols-outlined text-sm">auto_fix_high</span>
-            自动填入
-          </span>
+      {/* Quick Scenarios — Grid */}
+      <section className="mb-12">
+        <div className="flex items-center justify-between mb-5">
+          <h4 className="text-sm font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]/60 px-1">Quick Scenarios</h4>
+          <div className="h-[1px] flex-grow mx-4 bg-[var(--muted-2)]/30"></div>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          {scenarios.map((s) => (
-            <button key={s.title} onClick={() => onFill(s.fill)}
-              className="glass-card p-4 rounded-[20px] text-left cursor-pointer active:scale-[0.97] transition-transform">
-              <h4 className="text-[16px] font-semibold text-[var(--text)]">{s.title}</h4>
-              <p className="text-xs text-[var(--text-secondary)] mt-1">{s.desc}</p>
-            </button>
-          ))}
+          {scenarios.map((s, idx) => {
+            const color = SCENARIO_COLORS[idx % SCENARIO_COLORS.length]
+            return (
+              <button
+                key={s.title}
+                onClick={() => onFill(s.fill)}
+                className="glass-card p-4 rounded-2xl text-left cursor-pointer active:scale-[0.96] transition-all duration-300 group relative overflow-hidden"
+              >
+                <div className="absolute top-0 right-0 w-20 h-20 rounded-full blur-[40px] opacity-15 -translate-y-1/2 translate-x-1/3 transition-opacity group-hover:opacity-30" style={{ background: color }} />
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center mb-3"
+                  style={{ background: `color-mix(in srgb, ${color} 15%, transparent)` }}
+                >
+                  <span className="material-symbols-outlined text-xl" style={{ color }}>
+                    {SCENARIO_ICONS[s.emoji] || 'help'}
+                  </span>
+                </div>
+                <h5 className="text-[15px] font-bold text-[var(--text)] mb-1">{s.title}</h5>
+                <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{s.desc}</p>
+              </button>
+            )
+          })}
         </div>
       </section>
 
-      {/* Example Questions */}
-      <section className="space-y-4">
-        <h3 className="text-[var(--text)] font-semibold px-1">你可以这样问</h3>
+      {/* Try Asking Me */}
+      <section className="mb-20">
+        <h4 className="text-sm font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]/60 mb-6 px-1">Try asking me</h4>
         <div className="space-y-3">
           {examples.map((ex) => (
             <button key={ex} onClick={() => onFill(ex)}
-              className="glass-card flex items-center justify-between w-full p-4 rounded-[20px] text-left cursor-pointer active:scale-[0.98] transition-transform">
-              <span className="text-[15px] font-medium text-[var(--text-secondary)]">{ex}</span>
-              <div className="flex-shrink-0 w-9 h-9 rounded-full bg-white/10 flex items-center justify-center text-[var(--secondary)]">
-                <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
-              </div>
+              className="w-full text-left p-5 bg-[#0f141a] hover:bg-[#1b2028] rounded-2xl flex items-center justify-between group transition-all duration-300"
+            >
+              <span className="text-[var(--text)] font-medium">"{ex}"</span>
+              <span className="material-symbols-outlined text-[var(--muted-2)] group-hover:text-[var(--primary)] transition-colors">arrow_outward</span>
             </button>
           ))}
         </div>
@@ -154,14 +179,12 @@ export default function ChatPage() {
     })
   }, [])
 
-  // Track visualViewport to handle iOS keyboard
   useEffect(() => {
     const vv = window.visualViewport
     if (!vv) return
 
     function updateHeight() {
       setAppHeight(`${vv.height}px`)
-      // Prevent iOS scroll offset
       window.scrollTo(0, 0)
       document.documentElement.scrollTop = 0
     }
@@ -226,36 +249,46 @@ export default function ChatPage() {
   }
 
   const inChat = messages.length > 0
-  const cityName = getLocation()?.city
+  const loc = getLocation()
+  const cityName = loc ? [loc.city, loc.district].filter(Boolean).join(' ') || loc.city : ''
 
   return (
-    <div className="flex flex-col" style={{ height: appHeight }}>
+    <div className="flex flex-col bg-gradient-to-br from-[#0a0e14] via-[#0f141a] to-[#0a0e14]" style={{ height: appHeight }}>
       {/* Header */}
-      <header className="flex-shrink-0 bg-[#0a0e14]/80 backdrop-blur-xl flex justify-between items-center px-6 py-4 w-full z-50">
-        <div className="flex items-center gap-2">
-          <span className="material-symbols-outlined text-[var(--primary)]">bubble_chart</span>
-          <h1 className="text-[var(--primary)] font-black tracking-tighter text-xl">帮我选</h1>
-        </div>
-        <div className="flex items-center gap-2">
-          {cityName && (
-            <div className="flex items-center gap-1 text-slate-400 text-sm">
-              <span className="material-symbols-outlined text-sm">location_on</span>
-              <span className="font-bold">{cityName}</span>
-            </div>
-          )}
-          {inChat && (
+      <header className="flex-shrink-0 bg-[#0a0e14]/80 backdrop-blur-xl z-50 shadow-[0_4px_30px_rgba(0,0,0,0.1)]">
+        <div className="flex justify-between items-center px-6 h-16 w-full">
+          <div className="flex items-center gap-3">
+            <span className="material-symbols-outlined text-[var(--primary)]" style={{ fontVariationSettings: "'FILL' 1" }}>auto_awesome</span>
+            <h1 className="text-xl font-black tracking-tighter text-[var(--primary)]" style={{ filter: 'drop-shadow(0 0 15px rgba(182,160,255,0.3))' }}>帮我选</h1>
+          </div>
+          <div className="flex items-center gap-3">
             <button
-              onClick={() => setMessages([])}
-              className="w-8 h-8 rounded-full grid place-items-center text-[var(--muted)] text-sm hover:bg-white/10 transition-colors"
+              onClick={async () => {
+                const loc = await requestLocation()
+                if (loc?.city) {
+                  setLocationText(formatLocation(loc))
+                }
+              }}
+              className="flex items-center gap-1 text-slate-400 text-sm hover:text-[var(--primary)] transition-colors active:scale-95"
             >
-              <span className="material-symbols-outlined text-[18px]">close</span>
+              <span className="material-symbols-outlined text-sm">location_on</span>
+              <span className="font-bold">{cityName || '获取定位...'}</span>
             </button>
-          )}
+            {inChat && (
+              <button
+                onClick={() => setMessages([])}
+                className="w-8 h-8 rounded-full grid place-items-center text-[var(--muted)] text-sm hover:bg-white/10 transition-colors"
+              >
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            )}
+          </div>
         </div>
+        <div className="h-[1px] w-full bg-gradient-to-r from-transparent via-[var(--primary)]/20 to-transparent" />
       </header>
 
       {/* Content — scrollable */}
-      <main className="flex-1 overflow-y-auto max-w-xl mx-auto w-full px-6 pt-6 pb-4">
+      <main className="flex-1 overflow-y-auto max-w-xl mx-auto w-full px-6 pt-8 pb-4">
         {!inChat ? (
           <LandingView scenarios={scenarios} examples={examples} onFill={handleFill} onOpenFortune={() => setShowFortune(true)} />
         ) : (
@@ -263,9 +296,19 @@ export default function ChatPage() {
         )}
       </main>
 
-      {/* Input — stays at bottom of flex, no fixed positioning */}
+      {/* Input — stays at bottom of flex */}
       <ChatInput ref={inputRef} onSend={handleSend} disabled={loading} />
+
+      {/* Fortune Modal */}
       {showFortune && <FortuneModal onClose={() => setShowFortune(false)} />}
+
+      {/* Decorative blur orbs */}
+      {!inChat && (
+        <>
+          <div className="fixed top-[-10%] left-[-10%] w-[40%] h-[40%] bg-[var(--primary)]/10 rounded-full blur-[120px] pointer-events-none -z-10" />
+          <div className="fixed bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-[var(--secondary)]/10 rounded-full blur-[150px] pointer-events-none -z-10" />
+        </>
+      )}
     </div>
   )
 }

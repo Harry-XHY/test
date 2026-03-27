@@ -55,8 +55,26 @@ const FORTUNES = [
   { level: '下下签', message: '做什么决定都会纠结，不如摆烂', yi: '躺平休息', ji: '强行决策' },
 ]
 
+function getDeviceId() {
+  const key = 'bangpick_device_id'
+  let id = localStorage.getItem(key)
+  if (!id) {
+    id = Math.random().toString(36).slice(2) + Date.now().toString(36)
+    localStorage.setItem(key, id)
+  }
+  return id
+}
+
+function hashStr(str) {
+  let h = 0
+  for (let i = 0; i < str.length; i++) {
+    h = (Math.imul(31, h) + str.charCodeAt(i)) | 0
+  }
+  return Math.abs(h)
+}
+
 export function getTodayFortune() {
-  const seed = seedFromDate()
+  const seed = hashStr(getDateStr() + getDeviceId())
   const shuffled = seededShuffle(FORTUNES, seed)
   return shuffled[0]
 }
