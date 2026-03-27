@@ -146,3 +146,107 @@ export function exportReport(filename, modules, verifications) {
   document.body.removeChild(a)
   URL.revokeObjectURL(url)
 }
+
+// ── 通用：构建表格数据行 ──────────────────────
+
+function buildRows(modules, verifications) {
+  const rows = []
+  for (const mod of modules) {
+    for (const item of mod.items) {
+      const v = verifications[item.id]
+      const s = v?.status || 'pending'
+      rows.push({
+        模块: mod.name,
+        编号: item.id,
+        检查项: item.description,
+        优先级: item.priority || '',
+        分类: item.category || '',
+        预期结果: item.expected_result || '',
+        验收结果: statusLabel[s],
+        备注: v?.note || '',
+      })
+    }
+  }
+  return rows
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+// ── Excel 导出 (.xlsx) ────────────────────────
+
+export function exportExcel(filename, modules, verifications) {
+  import('xlsx').then((XLSX) => {
+    const rows = buildRows(modules, verifications)
+    const ws = XLSX.utils.json_to_sheet(rows)
+
+    // 设置列宽
+    ws['!cols'] = [
+      { wch: 20 }, // 模块
+      { wch: 8 },  // 编号
+      { wch: 40 }, // 检查项
+      { wch: 8 },  // 优先级
+      { wch: 12 }, // 分类
+      { wch: 30 }, // 预期结果
+      { wch: 10 }, // 验收结果
+      { wch: 20 }, // 备注
+    ]
+
+    // 添加汇总 sheet
+    const all = Object.values(verifications)
+    const summaryData = [
+      { 指标: '总检查项', 数量: all.length },
+      { 指标: '通过', 数量: all.filter((v) => v.status === 'pass').length },
+      { 指标: '不通过', 数量: all.filter((v) => v.status === 'fail').length },
+      { 指标: '跳过', 数量: all.filter((v) => v.status === 'skip').length },
+      { 指标: '未验收', 数量: all.filter((v) => v.status === 'pending').length },
+      { 指标: '通过率', 数量: all.length > 0
+        ? Math.round((all.filter((v) => v.status === 'pass').length / all.length) * 100) + '%'
+        : '0%' },
+    ]
+    const wsSummary = XLSX.utils.json_to_sheet(summaryData)
+    wsSummary['!cols'] = [{ wch: 12 }, { wch: 10 }]
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, '验收清单')
+    XLSX.utils.book_append_sheet(wb, wsSummary, '汇总统计')
+
+    const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const date = new Date().toISOString().split('T')[0]
+    downloadBlob(blob, `验收报告_${filename.replace(/\.[^.]+$/, '')}_${date}.xlsx`)
+  })
+}
+
+// ── CSV 导出 ──────────────────────────────────
+
+export function exportCSV(filename, modules, verifications) {
+  const rows = buildRows(modules, verifications)
+  if (rows.length === 0) return
+
+  const headers = Object.keys(rows[0])
+  const csvContent = [
+    headers.join(','),
+    ...rows.map((row) =>
+      headers.map((h) => {
+        const val = String(row[h] || '').replace(/"/g, '""')
+        return val.includes(',') || val.includes('"') || val.includes('\n')
+          ? `"${val}"`
+          : val
+      }).join(',')
+    ),
+  ].join('\n')
+
+  // BOM + UTF-8 确保中文兼容
+  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8' })
+  const date = new Date().toISOString().split('T')[0]
+  downloadBlob(blob, `验收报告_${filename.replace(/\.[^.]+$/, '')}_${date}.csv`)
+}

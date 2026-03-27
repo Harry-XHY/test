@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import FileUpload from '../components/FileUpload'
 import { parseDocument } from '../lib/pdf-parser'
 import { generateChecklist, generateMockChecklist } from '../lib/deepseek'
+import { saveDoc, getSetting } from '../lib/db'
 
 const STEPS = [
   { key: 'upload', label: '上传' },
@@ -41,9 +42,13 @@ export default function UploadPage() {
 
   const isProcessing = ['parsing', 'generating', 'saving'].includes(status)
   const elapsed = useElapsedTime(isProcessing)
-  const hasApiKey = !!localStorage.getItem('ai_api_key')
+  const [hasApiKey, setHasApiKey] = useState(false)
 
-  const saveAndNavigate = (filename, text, checklist) => {
+  useEffect(() => {
+    getSetting('ai_api_key').then((k) => setHasApiKey(!!k))
+  }, [])
+
+  const saveAndNavigate = async (filename, text, checklist) => {
     setStatus('saving')
     setCurrentStep(3)
     setPercent(95)
@@ -52,9 +57,7 @@ export default function UploadPage() {
       filename, text, checklist,
       createdAt: new Date().toISOString(),
     }
-    const docs = JSON.parse(localStorage.getItem('documents') || '[]')
-    docs.unshift(doc)
-    localStorage.setItem('documents', JSON.stringify(docs))
+    await saveDoc(doc)
     setPercent(100)
     setTimeout(() => navigate(`/checklist/${doc.id}`), 400)
   }

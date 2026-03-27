@@ -7,22 +7,6 @@ const MAX_CHUNK_LENGTH = 12000
 const isDev = import.meta.env.DEV
 
 const PROVIDERS = {
-  deepseek: {
-    name: 'DeepSeek',
-    apiUrl: isDev ? '/api/deepseek/v1/chat/completions' : 'https://api.deepseek.com/v1/chat/completions',
-    model: 'deepseek-chat',
-    keyPrefix: 'sk-',
-    getKey: 'https://platform.deepseek.com',
-    supportsJsonFormat: true,
-  },
-  minimax: {
-    name: 'MiniMax',
-    apiUrl: isDev ? '/api/minimax/v1/text/chatcompletion_v2' : 'https://api.minimax.chat/v1/text/chatcompletion_v2',
-    model: 'MiniMax-Text-01',
-    keyPrefix: 'eyJ',
-    getKey: 'https://platform.minimaxi.com',
-    supportsJsonFormat: false,
-  },
   'minimax-2.7': {
     name: 'MiniMax M2.7',
     apiUrl: isDev ? '/api/minimax-anthropic/v1/messages' : 'https://api.minimaxi.com/anthropic/v1/messages',
@@ -35,7 +19,7 @@ const PROVIDERS = {
 }
 
 function getConfig() {
-  const provider = localStorage.getItem('ai_provider') || 'deepseek'
+  const provider = localStorage.getItem('ai_provider') || 'minimax-2.7'
   const apiKey = localStorage.getItem('ai_api_key')
   if (!apiKey) {
     throw new Error('请先在设置中配置 API Key')
@@ -160,6 +144,17 @@ async function callApi(config, userContent) {
     console.error('JSON 解析失败，原始内容:', content.slice(0, 500))
     throw new Error(`${config.name} 返回格式异常，请重试`)
   }
+}
+
+export async function testConnection() {
+  const config = getConfig()
+  const body = config.apiFormat === 'anthropic'
+    ? { model: config.model, max_tokens: 16, system: 'Reply OK', messages: [{ role: 'user', content: 'ping' }] }
+    : { model: config.model, messages: [{ role: 'user', content: 'Reply OK' }], max_tokens: 16 }
+  const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` }
+  const res = await fetch(config.apiUrl, { method: 'POST', headers, body: JSON.stringify(body) })
+  if (!res.ok) throw new Error(`${res.status}`)
+  return true
 }
 
 export async function generateChecklist(docText, onProgress) {

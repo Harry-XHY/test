@@ -1,21 +1,25 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { getAllDocs, deleteDoc as dbDeleteDoc } from '../lib/db'
 
 export default function HistoryPage() {
-  const [docs, setDocs] = useState(() =>
-    JSON.parse(localStorage.getItem('documents') || '[]')
-  )
+  const [docs, setDocs] = useState([])
   const [search, setSearch] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [typeFilter, setTypeFilter] = useState('all')
 
-  const filtered = search
-    ? docs.filter((d) => d.filename.toLowerCase().includes(search.toLowerCase()))
-    : docs
+  useEffect(() => {
+    getAllDocs().then((d) => { setDocs(d); setLoading(false) })
+  }, [])
 
-  const handleDelete = (id) => {
+  const filtered = docs
+    .filter((d) => typeFilter === 'all' || (d.type || 'checklist') === typeFilter)
+    .filter((d) => !search || d.filename.toLowerCase().includes(search.toLowerCase()))
+
+  const handleDelete = async (id) => {
     if (!confirm('确定删除这条记录？')) return
-    const updated = docs.filter((d) => d.id !== id)
-    setDocs(updated)
-    localStorage.setItem('documents', JSON.stringify(updated))
+    await dbDeleteDoc(id)
+    setDocs((prev) => prev.filter((d) => d.id !== id))
   }
 
   const relativeTime = (dateStr) => {
@@ -28,6 +32,10 @@ export default function HistoryPage() {
     const days = Math.floor(hrs / 24)
     if (days < 30) return `${days} 天前`
     return new Date(dateStr).toLocaleDateString('zh-CN')
+  }
+
+  if (loading) {
+    return <div className="text-center py-24" style={{ color: 'var(--text-muted)' }}>加载中...</div>
   }
 
   if (docs.length === 0) {
@@ -73,6 +81,27 @@ export default function HistoryPage() {
         />
       </div>
 
+      {/* 类型筛选 */}
+      <div className="flex gap-2 mb-4">
+        {[
+          { key: 'all', label: '全部' },
+          { key: 'checklist', label: '验收' },
+          { key: 'merge', label: '整合' },
+        ].map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setTypeFilter(tab.key)}
+            className="text-xs px-3 py-1 rounded-md cursor-pointer border-none transition-colors"
+            style={{
+              background: typeFilter === tab.key ? 'rgba(99,102,241,0.15)' : 'transparent',
+              color: typeFilter === tab.key ? '#818cf8' : 'var(--text-muted)',
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
       {/* 卡片网格 */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {filtered.map((doc) => {
@@ -82,7 +111,7 @@ export default function HistoryPage() {
           return (
             <Link
               key={doc.id}
-              to={`/checklist/${doc.id}`}
+              to={doc.type === 'merge' ? `/merge/${doc.id}` : `/checklist/${doc.id}`}
               className="glass-card p-5 no-underline transition-all duration-200 block"
               style={{ cursor: 'pointer' }}
               onMouseEnter={(e) => {

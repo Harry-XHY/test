@@ -161,3 +161,16 @@ body {
     display: none !important;
   }
 }
+
+/* Markdown 预览样式 */
+.prose-preview h1 { font-size: 22px; font-weight: 700; margin: 0 0 16px; padding-bottom: 8px; border-bottom: 2px solid var(--border-subtle); }
+.prose-preview h2 { font-size: 17px; font-weight: 700; margin: 24px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border-subtle); }
+.prose-preview h3 { font-size: 15px; font-weight: 600; margin: 16px 0 6px; }
+.prose-preview h4 { font-size: 14px; font-weight: 600; margin: 12px 0 4px; }
+.prose-preview p { margin: 6px 0; }
+.prose-preview ul, .prose-preview ol { padding-left: 20px; margin: 6px 0; }
+.prose-preview table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 13px; }
+.prose-preview th { background: rgba(255,255,255,0.04); padding: 6px 8px; text-align: left; font-weight: 600; border: 1px solid var(--border-subtle); }
+.prose-preview td { padding: 6px 8px; border: 1px solid var(--border-subtle); }
+.prose-preview code { background: rgba(255,255,255,0.06); padding: 2px 5px; border-radius: 4px; font-size: 13px; }
+.prose-preview pre { background: rgba(255,255,255,0.04); padding: 12px; border-radius: 8px; overflow-x: auto; margin: 8px 0; }

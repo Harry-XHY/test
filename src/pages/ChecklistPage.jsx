@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import ChecklistView from '../components/ChecklistView'
 import { useChecklist } from '../hooks/useChecklist'
-import { exportReport } from '../lib/export-report'
+import { exportReport, exportExcel, exportCSV } from '../lib/export-report'
+import { getDoc } from '../lib/db'
 
 function DonutChart({ percent, size = 80, stroke = 6 }) {
   const r = (size - stroke) / 2
@@ -57,17 +58,22 @@ export default function ChecklistPage() {
   } = useChecklist()
 
   useEffect(() => {
-    const docs = JSON.parse(localStorage.getItem('documents') || '[]')
-    const found = docs.find((d) => d.id === id)
-    if (found) { setDoc(found); loadChecklist(found.checklist, found.id) }
-    else navigate('/')
+    getDoc(id).then((found) => {
+      if (found) { setDoc(found); loadChecklist(found.checklist, found.id) }
+      else navigate('/')
+    })
   }, [id, navigate, loadChecklist])
 
   const stats = getStats()
   const passRate = stats.total > 0 ? Math.round((stats.pass / stats.total) * 100) : 0
 
-  const handleExport = () => {
-    exportReport(doc.filename, modules, verifications)
+  const [showExportMenu, setShowExportMenu] = useState(false)
+
+  const handleExport = (format) => {
+    setShowExportMenu(false)
+    if (format === 'html') exportReport(doc.filename, modules, verifications)
+    else if (format === 'excel') exportExcel(doc.filename, modules, verifications)
+    else if (format === 'csv') exportCSV(doc.filename, modules, verifications)
   }
 
   if (!doc) return null
@@ -87,9 +93,44 @@ export default function ChecklistPage() {
             <button onClick={() => navigate('/')} className="btn-ghost" style={{ padding: '8px 16px', fontSize: '13px' }}>
               ← 返回
             </button>
-            <button onClick={handleExport} className="btn-gradient" style={{ padding: '8px 16px', fontSize: '13px' }}>
-              导出报告
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => setShowExportMenu(!showExportMenu)}
+                className="btn-gradient"
+                style={{ padding: '8px 16px', fontSize: '13px' }}
+              >
+                导出报告 ▾
+              </button>
+              {showExportMenu && (
+                <div
+                  className="absolute right-0 mt-2 rounded-xl overflow-hidden z-50"
+                  style={{
+                    background: 'var(--bg-elevated, #1e293b)',
+                    border: '1px solid var(--border-subtle)',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                    minWidth: '160px',
+                  }}
+                >
+                  {[
+                    { key: 'html', label: 'HTML 报告', desc: '完整样式' },
+                    { key: 'excel', label: 'Excel 表格', desc: '.xlsx' },
+                    { key: 'csv', label: 'CSV 表格', desc: '通用格式' },
+                  ].map((opt) => (
+                    <button
+                      key={opt.key}
+                      onClick={() => handleExport(opt.key)}
+                      className="w-full text-left px-4 py-2.5 text-sm cursor-pointer bg-transparent border-none block transition-colors"
+                      style={{ color: 'var(--text-primary)' }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      <div className="font-medium">{opt.label}</div>
+                      <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{opt.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

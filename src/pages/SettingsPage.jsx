@@ -1,26 +1,32 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { getProviders } from '../lib/deepseek'
+import {
+  getSetting, setSetting, deleteSetting,
+  clearAllData, estimateStorageSize,
+  exportAllData, importAllData,
+} from '../lib/db'
 
 const providers = getProviders()
 
-// 迁移旧版 key
-;(() => {
-  const oldKey = localStorage.getItem('deepseek_api_key')
-  if (oldKey && !localStorage.getItem('ai_api_key')) {
-    localStorage.setItem('ai_api_key', oldKey)
-    localStorage.setItem('ai_provider', 'deepseek')
-    localStorage.removeItem('deepseek_api_key')
-  }
-})()
-
 export default function SettingsPage() {
-  const [provider, setProvider] = useState(localStorage.getItem('ai_provider') || 'deepseek')
-  const [apiKey, setApiKey] = useState(localStorage.getItem('ai_api_key') || '')
+  const [provider, setProvider] = useState('minimax-2.7')
+  const [apiKey, setApiKey] = useState('')
   const [saved, setSaved] = useState(false)
   const [testing, setTesting] = useState(false)
-  const [testResult, setTestResult] = useState(null) // null | 'ok' | 'fail'
+  const [testResult, setTestResult] = useState(null)
+  const [storageSize, setStorageSize] = useState('0')
+  const [importing, setImporting] = useState(false)
 
   const currentProvider = providers[provider]
+
+  // 从 IndexedDB 加载设置
+  useEffect(() => {
+    Promise.all([getSetting('ai_provider'), getSetting('ai_api_key')]).then(([p, k]) => {
+      if (p) setProvider(p)
+      if (k) setApiKey(k)
+    })
+    estimateStorageSize().then((s) => setStorageSize((s.used / 1024).toFixed(1)))
+  }, [])
 
   const handleProviderChange = (key) => {
     setProvider(key)
@@ -28,11 +34,16 @@ export default function SettingsPage() {
     setTestResult(null)
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (apiKey.trim()) {
+      await setSetting('ai_api_key', apiKey.trim())
+      await setSetting('ai_provider', provider)
+      // 同步到 localStorage 供 deepseek.js 读取
       localStorage.setItem('ai_api_key', apiKey.trim())
       localStorage.setItem('ai_provider', provider)
     } else {
+      await deleteSetting('ai_api_key')
+      await deleteSetting('ai_provider')
       localStorage.removeItem('ai_api_key')
       localStorage.removeItem('ai_provider')
     }
@@ -46,12 +57,9 @@ export default function SettingsPage() {
     setTesting(true)
     setTestResult(null)
     try {
-      // 保存后测试
-      localStorage.setItem('ai_api_key', apiKey.trim())
-      localStorage.setItem('ai_provider', provider)
-
-      const { generateChecklist } = await import('../lib/deepseek')
-      await generateChecklist('测试文档：用户登录功能，输入用户名和密码登录。')
+      await handleSave()
+      const { testConnection } = await import('../lib/deepseek')
+      await testConnection()
       setTestResult('ok')
     } catch {
       setTestResult('fail')
@@ -59,21 +67,49 @@ export default function SettingsPage() {
     setTesting(false)
   }
 
-  const handleClearData = () => {
+  const handleClearData = async () => {
     if (!confirm('确定清除所有本地数据？包括验收记录和设置。')) return
+    await clearAllData()
     localStorage.clear()
     window.location.reload()
   }
 
-  const storageSize = (() => {
-    let total = 0
-    for (const key in localStorage) {
-      if (Object.prototype.hasOwnProperty.call(localStorage, key)) {
-        total += localStorage.getItem(key).length
+  // JSON 导出
+  const handleExportBackup = async () => {
+    const data = await exportAllData()
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `acceptbot_backup_${new Date().toISOString().split('T')[0]}.json`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  // JSON 导入
+  const handleImportBackup = () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.json'
+    input.onchange = async (e) => {
+      const file = e.target.files[0]
+      if (!file) return
+      setImporting(true)
+      try {
+        const text = await file.text()
+        const data = JSON.parse(text)
+        await importAllData(data)
+        alert(`导入成功！共恢复 ${data.documents?.length || 0} 份文档`)
+        window.location.reload()
+      } catch (err) {
+        alert('导入失败：' + err.message)
       }
+      setImporting(false)
     }
-    return (total / 1024).toFixed(1)
-  })()
+    input.click()
+  }
 
   return (
     <div className="max-w-xl mx-auto">
@@ -178,11 +214,41 @@ export default function SettingsPage() {
       <div className="glass-card p-6">
         <h2 className="text-base font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>数据管理</h2>
         <p className="text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>
-          数据保存在浏览器本地存储
+          数据保存在浏览器 IndexedDB（持久化存储）
         </p>
         <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>
           已用空间：{storageSize} KB
         </p>
+
+        {/* 备份/恢复 */}
+        <div className="flex gap-3 mb-4">
+          <button
+            onClick={handleExportBackup}
+            className="text-xs cursor-pointer rounded-lg transition-colors"
+            style={{
+              background: 'rgba(59,130,246,0.08)',
+              border: '1px solid rgba(59,130,246,0.15)',
+              color: '#60a5fa',
+              padding: '8px 16px',
+            }}
+          >
+            导出备份 (JSON)
+          </button>
+          <button
+            onClick={handleImportBackup}
+            disabled={importing}
+            className="text-xs cursor-pointer rounded-lg transition-colors"
+            style={{
+              background: 'rgba(34,197,94,0.08)',
+              border: '1px solid rgba(34,197,94,0.15)',
+              color: '#4ade80',
+              padding: '8px 16px',
+            }}
+          >
+            {importing ? '导入中...' : '导入备份 (JSON)'}
+          </button>
+        </div>
+
         <button
           onClick={handleClearData}
           className="text-xs cursor-pointer rounded-lg transition-colors"

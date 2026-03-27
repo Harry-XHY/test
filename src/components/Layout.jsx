@@ -6,6 +6,7 @@ export default function Layout({ children }) {
 
   const navItems = [
     { path: '/', label: '上传文档' },
+    { path: '/merge', label: '文档整合' },
     { path: '/history', label: '历史记录' },
     { path: '/settings', label: '设置' },
   ]

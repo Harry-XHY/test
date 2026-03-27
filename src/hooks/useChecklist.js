@@ -1,16 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-
-// 持久化验收状态到 localStorage
-function saveVerifications(docId, verifications) {
-  if (!docId) return
-  localStorage.setItem(`verifications_${docId}`, JSON.stringify(verifications))
-}
-
-function loadVerifications(docId) {
-  if (!docId) return null
-  const saved = localStorage.getItem(`verifications_${docId}`)
-  return saved ? JSON.parse(saved) : null
-}
+import { getVerifications, saveVerifications as dbSaveVerifications } from '../lib/db'
 
 export function useChecklist() {
   const [modules, setModules] = useState([])
@@ -18,20 +7,20 @@ export function useChecklist() {
   const [verifications, setVerifications] = useState({})
   const docIdRef = useRef(null)
 
-  // 验收状态变化时自动保存
+  // 验收状态变化时自动保存到 IndexedDB
   useEffect(() => {
     if (docIdRef.current && Object.keys(verifications).length > 0) {
-      saveVerifications(docIdRef.current, verifications)
+      dbSaveVerifications(docIdRef.current, verifications)
     }
   }, [verifications])
 
-  const loadChecklist = useCallback((data, docId) => {
+  const loadChecklist = useCallback(async (data, docId) => {
     docIdRef.current = docId || null
     setModules(data.modules || [])
     setSummary(data.summary || {})
 
-    // 尝试恢复已保存的验收状态
-    const saved = docId ? loadVerifications(docId) : null
+    // 从 IndexedDB 恢复已保存的验收状态
+    const saved = docId ? await getVerifications(docId) : null
 
     const initVerifications = {}
     for (const mod of data.modules || []) {
