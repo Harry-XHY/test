@@ -4,6 +4,7 @@ import OptionCard from '../components/OptionCard'
 import RandomPicker from '../components/RandomPicker'
 import FortuneCard from '../components/FortuneCard'
 import FortuneModal from '../components/FortuneModal'
+import BottomNav from '../components/BottomNav'
 import { sendMessage } from '../lib/minimax'
 import { buildSystemPrompt } from '../lib/prompt'
 import { saveDecision } from '../lib/storage'
@@ -253,7 +254,7 @@ export default function ChatPage() {
   const cityName = loc ? [loc.city, loc.district].filter(Boolean).join(' ') || loc.city : ''
 
   return (
-    <div className="flex flex-col bg-gradient-to-br from-[#0a0e14] via-[#0f141a] to-[#0a0e14]" style={{ height: appHeight }}>
+    <div className="flex flex-col bg-gradient-to-br from-[#0a0e14] via-[#0f141a] to-[#0a0e14] pb-20" style={{ height: appHeight }}>
       {/* Header */}
       <header className="flex-shrink-0 bg-[#0a0e14]/80 backdrop-blur-xl z-50 shadow-[0_4px_30px_rgba(0,0,0,0.1)]">
         <div className="flex justify-between items-center px-6 h-16 w-full">
@@ -309,6 +310,8 @@ export default function ChatPage() {
           <div className="fixed bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-[var(--secondary)]/10 rounded-full blur-[150px] pointer-events-none -z-10" />
         </>
       )}
+
+      <BottomNav />
     </div>
   )
 }
