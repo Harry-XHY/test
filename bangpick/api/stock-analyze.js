@@ -34,21 +34,25 @@ const newsSystemPrompt = `你是一位专业的A股短线交易助手，服务�
 结尾必须加：⚠️ 股市有风险，短线交易波动大，建议仓位不超过总资金的30%，严格执行止损止盈纪律`
 
 async function callMiniMax(systemPrompt, userContent) {
-  const response = await fetch('https://api.minimaxi.com/anthropic/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${process.env.MINIMAX_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: 'MiniMax-Text-01',
-      max_tokens: 2048,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userContent }],
-    }),
-  })
-  const data = await response.json()
-  return data.content?.[0]?.text || data.content || '分析失败，请稍后重试'
+  try {
+    const response = await fetch('https://api.minimaxi.com/anthropic/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.MINIMAX_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'MiniMax-Text-01',
+        max_tokens: 2048,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userContent }],
+      }),
+    })
+    const data = await response.json()
+    return data.content?.[0]?.text || data.content || '分析失败，请稍后重试'
+  } catch (err) {
+    return '服务暂时不可用，请稍后重试'
+  }
 }
 
 function buildStockDataStr(stocks) {
@@ -115,6 +119,10 @@ async function handleHolding(req, res) {
     return res.status(400).json({ error: '成本价必须大于0' })
   }
 
+  if (!code || market === undefined || market === null) {
+    return res.status(400).json({ error: '缺少股票代码或市场参数' })
+  }
+
   const stockData = await fetchStockData({ code, market, name: name || code })
 
   if (stockData.error) return res.status(200).json(stockData)
@@ -167,10 +175,12 @@ export default async function handler(req, res) {
   const { type } = req.body
   if (!type) return res.status(400).json({ error: '缺少分析类型' })
 
-  switch (type) {
-    case 'recommend': return handleRecommend(req, res)
-    case 'holding':   return handleHolding(req, res)
-    case 'news':      return handleNews(req, res)
-    default:          return res.status(400).json({ error: `未知类型：${type}` })
+  try {
+    if (type === 'recommend') return handleRecommend(req, res)
+    else if (type === 'holding') return handleHolding(req, res)
+    else if (type === 'news') return handleNews(req, res)
+    else return res.status(400).json({ error: '不支持的分析类型' })
+  } catch (err) {
+    res.status(500).json({ error: '分析失败，请稍后重试' })
   }
 }

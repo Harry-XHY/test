@@ -6,6 +6,10 @@ export default async function handler(req, res) {
   const { code, market, name } = req.body
   if (!code || market === undefined) return res.status(400).json({ error: '缺少股票代码或市场' })
 
-  const result = await fetchStockData({ code, market, name: name || code })
-  res.status(200).json(result)
+  try {
+    const result = await fetchStockData({ code, market, name: name || code })
+    res.status(200).json(result)
+  } catch (err) {
+    res.status(500).json({ error: '获取股票数据失败' })
+  }
 }

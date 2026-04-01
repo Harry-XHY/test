@@ -4,7 +4,8 @@ export default async function handler(req, res) {
   const { keyword } = req.body
   if (!keyword || !keyword.trim()) return res.status(400).json({ error: '缺少搜索关键词' })
 
-  const token = process.env.EASTMONEY_TOKEN || 'D43BF722C8E33BDC906FB84D85E326E8'
+  const token = process.env.EASTMONEY_TOKEN
+  if (!token) return res.status(200).json([])
   const url = `https://searchapi.eastmoney.com/api/suggest/get?input=${encodeURIComponent(keyword.trim())}&type=14&token=${token}&count=10`
 
   const controller = new AbortController()
