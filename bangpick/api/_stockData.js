@@ -63,7 +63,7 @@ export async function fetchStockData({ code, market, name }) {
 
     const json = await res.json()
     const klines = json?.data?.klines
-    if (!Array.isArray(klines) || klines.length < 30) {
+    if (!Array.isArray(klines) || klines.length < 60) {
       return { code, name, error: '历史数据不足' }
     }
 
@@ -85,6 +85,10 @@ export async function fetchStockData({ code, market, name }) {
     // Guard: if the most recent candle has volume = 0, the stock is suspended
     const latest = candles[candles.length - 1]
     if (latest.volume === 0) {
+      return { code, name, suspended: true }
+    }
+
+    if (!isFinite(latest.volume) || !isFinite(latest.close)) {
       return { code, name, suspended: true }
     }
 
@@ -111,8 +115,13 @@ export async function fetchStockData({ code, market, name }) {
     // DEA: seed from first 9 DIF values, then apply multiplier
     const deaArr = calcEMA(difArr, 9, 2 / 10, 8 / 10)
 
+    const latestDea = deaArr[deaArr.length - 1]
+    if (latestDea === null) {
+      return { code, name, error: '历史数据不足以计算MACD' }
+    }
+
     const dif  = difArr[difArr.length - 1]
-    const dea  = deaArr[deaArr.length - 1]
+    const dea  = latestDea
     const macd = (dif - dea) * 2
 
     // MACD signal based on the last two DIF/DEA values
@@ -132,7 +141,8 @@ export async function fetchStockData({ code, market, name }) {
     // Volume ratio: avg of last 3 volumes / avg of 10 days before recent 3
     const recentVols = volumes.slice(n - 3)
     const baseVols   = volumes.slice(n - 13, n - 3)
-    const volRatio   = avg(recentVols) / avg(baseVols)
+    const baseAvg    = avg(baseVols)
+    const volRatio   = baseAvg === 0 ? 1.0 : parseFloat((avg(recentVols) / baseAvg).toFixed(2))
 
     const close  = latest.close
     const aboveMA = close > ma10 && close > ma20
