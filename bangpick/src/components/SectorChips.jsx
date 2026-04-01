@@ -6,6 +6,7 @@ export default function SectorChips({ onSelect, selected }) {
       {SECTORS.map(sector => (
         <button
           key={sector}
+          type="button"
           onClick={() => onSelect(sector)}
           className="px-3 py-1.5 rounded-full text-sm transition-all"
           style={{

@@ -13,8 +13,10 @@ export default function StockSearch({ onSubmit }) {
     if (!query || query.length < 1 || selected) { setSuggestions([]); return }
     clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(async () => {
+      setLoading(true)
       const results = await searchStock(query)
       setSuggestions(results.slice(0, 5))
+      setLoading(false)
     }, 300)
     return () => clearTimeout(debounceRef.current)
   }, [query, selected])
@@ -52,6 +54,7 @@ export default function StockSearch({ onSubmit }) {
             <span className="material-symbols-outlined text-sm">close</span>
           </button>
         )}
+        {loading && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs" style={{color:'#72757d'}}>...</span>}
         {suggestions.length > 0 && (
           <div className="absolute top-full left-0 right-0 mt-1 rounded-xl overflow-hidden z-10 glass-card">
             {suggestions.map(s => (
