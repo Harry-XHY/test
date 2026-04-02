@@ -400,8 +400,8 @@ async function handleRecommend(req, res) {
     await streamMiniMax(recommendSystemPrompt, userContent, (chunk) => {
       sseWrite(res, 'delta', { text: chunk })
     })
-  } catch (err) {
-    sseWrite(res, 'delta', { text: `分析服务暂时不可用（${err.message || err}）` })
+  } catch {
+    sseWrite(res, 'delta', { text: '分析服务暂时不可用' })
   }
 
   sseWrite(res, 'done', {})
@@ -493,8 +493,8 @@ async function handleHolding(req, res) {
     await streamMiniMax(holdingSystemPrompt, userContent, (chunk) => {
       sseWrite(res, 'delta', { text: chunk })
     })
-  } catch (err) {
-    sseWrite(res, 'delta', { text: `分析服务暂时不可用（${err.message || err}）` })
+  } catch {
+    sseWrite(res, 'delta', { text: '分析服务暂时不可用' })
   }
 
   sseWrite(res, 'done', {})
@@ -523,8 +523,8 @@ async function handleNews(req, res) {
     await streamMiniMax(newsSystemPrompt, userContent, (chunk) => {
       sseWrite(res, 'delta', { text: chunk })
     })
-  } catch (err) {
-    sseWrite(res, 'delta', { text: `分析服务暂时不可用（${err.message || err}）` })
+  } catch {
+    sseWrite(res, 'delta', { text: '分析服务暂时不可用' })
   }
 
   sseWrite(res, 'done', {})
@@ -551,8 +551,8 @@ async function handleQA(req, res) {
     await streamMiniMax(qaSystemPrompt, query, (chunk) => {
       sseWrite(res, 'delta', { text: chunk })
     })
-  } catch (err) {
-    sseWrite(res, 'delta', { text: `分析服务暂时不可用（${err.message || err}）` })
+  } catch {
+    sseWrite(res, 'delta', { text: '分析服务暂时不可用' })
   }
 
   sseWrite(res, 'done', {})
@@ -596,8 +596,8 @@ async function handleMarket(req, res) {
     await streamMiniMax(marketSystemPrompt, userContent, (chunk) => {
       sseWrite(res, 'delta', { text: chunk })
     })
-  } catch (err) {
-    sseWrite(res, 'delta', { text: `分析服务暂时不可用（${err.message || err}）` })
+  } catch {
+    sseWrite(res, 'delta', { text: '分析服务暂时不可用' })
   }
 
   sseWrite(res, 'done', {})
