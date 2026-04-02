@@ -10,6 +10,7 @@
   },
   "rewrites": [
     { "source": "/api/ip-location", "destination": "https://ipinfo.io/json" },
+    { "source": "/api/geocode/:path*", "destination": "https://nominatim.openstreetmap.org/:path*" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
