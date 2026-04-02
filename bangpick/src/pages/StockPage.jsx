@@ -16,7 +16,7 @@ const FEATURE_COLORS = {
 }
 
 /* ===== Landing View ===== */
-function StockLandingView({ onFill, onStartHolding, onStartNews }) {
+function StockLandingView({ onFill, onStartHolding, onStartNews, onStartRecommend }) {
   const holdings = getHoldings()
 
   return (
@@ -54,6 +54,7 @@ function StockLandingView({ onFill, onStartHolding, onStartNews }) {
                 onClick={() => {
                   if (f.key === 'holding') onStartHolding()
                   else if (f.key === 'news') onStartNews()
+                  else if (f.key === 'recommend') onStartRecommend()
                   else if (f.fill) onFill(f.fill)
                 }}
                 className="glass-card p-5 rounded-2xl text-left cursor-pointer active:scale-[0.98] transition-all duration-300 group relative overflow-hidden"
@@ -333,6 +334,14 @@ export default function StockPage() {
     }])
   }
 
+  function handleStartRecommend() {
+    setMessages(prev => [...prev, {
+      role: 'assistant',
+      content: '请选择你想分析的板块：',
+      showSectorPicker: true,
+    }])
+  }
+
   function handleStartNews() {
     inputRef.current?.fill('')
     // Focus input with placeholder hint
@@ -370,7 +379,7 @@ export default function StockPage() {
       {/* Content */}
       <main className="flex-1 overflow-y-auto max-w-xl mx-auto w-full px-6 pt-8 pb-4">
         {!inChat ? (
-          <StockLandingView onFill={handleFill} onStartHolding={handleStartHolding} onStartNews={handleStartNews} />
+          <StockLandingView onFill={handleFill} onStartHolding={handleStartHolding} onStartNews={handleStartNews} onStartRecommend={handleStartRecommend} />
         ) : (
           <StockChatView messages={messages} loading={loading} onRetry={handleRetry} onSend={handleSend} bottomRef={bottomRef} />
         )}

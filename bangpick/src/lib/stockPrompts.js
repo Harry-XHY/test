@@ -46,23 +46,23 @@ export function detectIntent(text) {
     return { type: 'holding', ...holdingMatch }
   }
 
-  // 2. Check for sector mention → recommend
+  // 2. Check for news pattern BEFORE recommend (news text may contain '板块' etc.)
+  const newsKeywords = ['新闻', '公告', '消息', '政策', '央行', '降准', '降息', '利好', '利空', '减持', '增持', '解禁', '财报', '业绩', '影响', '宣布', '发布']
+  if (t.length > 50 || newsKeywords.some(kw => t.includes(kw))) {
+    return { type: 'news', content: t }
+  }
+
+  // 3. Check for sector mention → recommend
   for (const sector of SECTORS) {
     if (t.includes(sector)) {
       return { type: 'recommend', sector, query: t }
     }
   }
 
-  // 3. Check for recommend keywords
-  const recommendKeywords = ['推荐', '选股', '潜力', '机会', '热点', '板块', '龙头', '短线']
+  // 4. Check for recommend keywords
+  const recommendKeywords = ['推荐', '选股', '潜力', '机会', '热点', '龙头', '短线', '板块']
   if (recommendKeywords.some(kw => t.includes(kw))) {
     return { type: 'recommend', sector: null, query: t }
-  }
-
-  // 4. Check for news pattern: long text or news keywords
-  const newsKeywords = ['新闻', '公告', '消息', '政策', '央行', '降准', '降息', '利好', '利空', '减持', '增持', '解禁', '财报', '业绩']
-  if (t.length > 50 || newsKeywords.some(kw => t.includes(kw))) {
-    return { type: 'news', content: t }
   }
 
   // 5. If contains a stock code but no cost → ask for cost
