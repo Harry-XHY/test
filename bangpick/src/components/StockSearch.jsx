@@ -38,10 +38,12 @@ export default function StockSearch({ onSubmit, onSend, compact }) {
 
   function handleSubmit(e) {
     e.preventDefault()
-    if (!selected || !costPrice || parseFloat(costPrice) <= 0) return
+    if (!query.trim() || !costPrice || parseFloat(costPrice) <= 0) return
     if (onSend) {
-      onSend(`帮我看看${selected.code} ${selected.name}，成本${costPrice}元`)
+      const label = selected ? `${selected.code} ${selected.name}` : query.trim()
+      onSend(`帮我看看${label}，成本${costPrice}元`)
     } else if (onSubmit) {
+      if (!selected) return
       onSubmit({ ...selected, costPrice: parseFloat(costPrice) })
     }
   }
@@ -99,7 +101,7 @@ export default function StockSearch({ onSubmit, onSend, compact }) {
           style={inputStyle}
         />
         <button type="submit"
-                disabled={!selected || !costPrice || parseFloat(costPrice) <= 0}
+                disabled={!query.trim() || !costPrice || parseFloat(costPrice) <= 0}
                 className={`${compact ? 'px-3 py-2 text-xs' : 'px-5 py-3 text-sm'} rounded-xl font-medium transition-all disabled:opacity-40`}
                 style={{ background: 'rgba(182,160,255,0.15)', border: '1px solid rgba(182,160,255,0.3)', color: '#b6a0ff' }}>
           分析
