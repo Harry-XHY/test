@@ -27,3 +27,26 @@ export function removeHolding(code) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(holdings))
   return holdings
 }
+
+// Stock chat history
+const CHAT_KEY = 'bangpick_stock_chat'
+
+export function getStockChat() {
+  try {
+    return JSON.parse(localStorage.getItem(CHAT_KEY) || '[]')
+  } catch {
+    return []
+  }
+}
+
+export function saveStockChat(messages) {
+  try {
+    // Keep last 50 messages max
+    const trimmed = messages.slice(-50)
+    localStorage.setItem(CHAT_KEY, JSON.stringify(trimmed))
+  } catch { /* quota exceeded */ }
+}
+
+export function clearStockChat() {
+  localStorage.removeItem(CHAT_KEY)
+}

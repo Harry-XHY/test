@@ -1,37 +1,59 @@
 import pLimit from 'p-limit'
 import { fetchStockData, fetchSectorStocks, SECTOR_MAP, isSTStock } from './_stockData.js'
 
+const RISK_FOOTER = '⚠️ 股市有风险，短线交易波动大，建议仓位不超过总资金的30%，严格执行止损止盈纪律。本工具仅为个人辅助参考，不构成投资建议。'
+
 const recommendSystemPrompt = `你是一位专业的A股短线交易助手，服务对象是炒股纯小白。
 
-你的任务是根据我提供的技术指标数据，为用户推荐最多3只短线潜力股。
+你的任务是根据我提供的技术指标数据，为用户推荐最多3只短线潜力股（持有周期1-5个交易日）。
+
+硬性选股规则（已通过技术筛选的数据才会给你）：
+- 日K站稳10日、20日均线上方（多头排列）
+- MACD金叉或零轴上方运行
+- 近3日成交量放大≥30%（有资金主动进场）
+- 已剔除ST股、退市风险股、流通盘超500亿股票
 
 输出要求：
 1. 用markdown表格呈现，列：股票代码+名称 | 推荐逻辑 | 建议买入区间 | 止损点位 | 止盈目标 | 风险提示
-2. 所有技术指标必须用大白话解释（例如"MACD金叉说明短期上涨动能增强"），禁止直接输出指标数值
-3. 买入区间、止损点、止盈目标基于当前收盘价给出合理百分比区间
-4. 结尾必须加：⚠️ 股市有风险，短线交易波动大，建议仓位不超过总资金的30%，严格执行止损止盈纪律
-5. 如遇到"保证盈利""100%赚钱"等不切实际需求，明确拒绝并引导理性投资`
+2. 推荐逻辑要结合技术面+题材面，全部用大白话（例如"资金在大量买入，短期有上涨动能"），严禁直接输出指标数值
+3. 买入区间、止损点、止盈目标基于当前收盘价给出明确价格区间
+4. 每只股票必须标注1-2条核心风险（如题材退潮、大盘风险、解禁、减持等）
+5. 结尾加：${RISK_FOOTER}
+
+严禁事项：
+- 严禁出现"保证盈利""100%赚钱""必涨"等承诺性表述
+- 不推荐超过3只个股
+- 不做长线价值分析，仅围绕1-5日短线
+- 遇到不切实际盈利需求，明确拒绝并引导理性投资`
 
 const holdingSystemPrompt = `你是一位专业的A股短线交易助手，服务对象是炒股纯小白。
 
 你的任务是根据用户的持仓信息和最新技术指标，给出明确的操作建议。
 
 输出要求：
-1. 首先给出明确的四选一建议：继续持有 / 加仓 / 减仓 / 清仓
-2. 用大白话解释判断理由（例如"今天成交量缩了，说明主力在观望，建议先不动"）
+1. 第一行必须给出明确的四选一建议（加粗）：**继续持有** / **加仓** / **减仓** / **清仓**
+2. 用大白话解释判断理由，就像跟完全不懂股票的朋友聊天（例如"今天成交量缩了，说明主力在观望，建议先不动"）
 3. 禁止输出原始指标数值，只能说信号含义
-4. 结尾必须加：⚠️ 股市有风险，短线交易波动大，建议仓位不超过总资金的30%，严格执行止损止盈纪律`
+4. 如果建议减仓或清仓，给出建议的卖出价格区间
+5. 结尾加：${RISK_FOOTER}
+
+严禁事项：
+- 不模棱两可，不模糊表述，必须给出明确操作结论
+- 仅围绕1-5日短线分析，不扩展周期`
 
 const newsSystemPrompt = `你是一位专业的A股短线交易助手，服务对象是炒股纯小白。
 
 你的任务是判断用户提供的新闻/公告对相关股票的短线影响。
 
 输出格式（严格按此格式）：
-判断：【利好 / 利空 / 中性】
-影响程度：【短期显著影响 / 短期轻微影响 / 无实质影响】
-理由：（1-2句大白话解释）
+**判断：利好 / 利空 / 中性**
+**影响程度：短期显著影响 / 短期轻微影响 / 无实质影响**
 
-结尾必须加：⚠️ 股市有风险，短线交易波动大，建议仓位不超过总资金的30%，严格执行止损止盈纪律`
+理由：（2-3句大白话解释，不做长线分析）
+
+如果新闻涉及具体股票，指出受影响的股票代码和名称。
+
+结尾加：${RISK_FOOTER}`
 
 async function callMiniMax(systemPrompt, userContent) {
   try {
@@ -64,7 +86,8 @@ function buildStockDataStr(stocks) {
     `${stock.name}(${stock.code})：收盘${stock.close}元，涨跌${stock.change}%，` +
     `均线位置${stock.aboveMA ? '价格在10日线和20日线上方（多头排列）' : '价格未能站上均线'}，` +
     `MACD信号${stock.macdSignal === 'golden_cross' ? '金叉（短期上涨动能增强）' : stock.macdSignal === 'above_zero' ? '零轴上方运行（持续多头）' : '信号偏弱'}，` +
-    `成交量较近期${stock.volRatio > 1.3 ? `放大${((stock.volRatio - 1) * 100).toFixed(0)}%` : '正常'}`
+    `成交量较近期${stock.volRatio > 1.3 ? `放大${((stock.volRatio - 1) * 100).toFixed(0)}%（有资金进场）` : '正常'}` +
+    (stock.marketCap ? `，流通市值约${(stock.marketCap / 1e8).toFixed(0)}亿` : '')
   ).join('\n')
 }
 
@@ -83,7 +106,7 @@ async function handleRecommend(req, res) {
 
   const valid = allResults.filter(s => !s.error && !s.suspended)
 
-  // 3-tier filtering
+  // 3-tier filtering: strict → medium → loose
   let filtered = valid.filter(s =>
     s.aboveMA &&
     s.volRatio > 1.3 &&
@@ -104,7 +127,7 @@ async function handleRecommend(req, res) {
   if (filtered.length === 0) {
     return res.status(200).json({
       type: 'no_opportunity',
-      message: '当前板块暂无短线机会，建议等待更好时机',
+      message: `当前${sector}板块暂无符合条件的短线机会，建议观望等待更好时机。\n\n${RISK_FOOTER}`,
     })
   }
 
@@ -113,7 +136,7 @@ async function handleRecommend(req, res) {
   const userContent = `用户问题：${query}\n\n以下是${sector}板块筛选出的技术面较强股票数据：\n${stockDataStr}`
 
   const text = await callMiniMax(recommendSystemPrompt, userContent)
-  return res.status(200).json({ text })
+  return res.status(200).json({ text, stockData: top3, type: 'recommend' })
 }
 
 async function handleHolding(req, res) {
@@ -129,8 +152,8 @@ async function handleHolding(req, res) {
 
   const stockData = await fetchStockData({ code, market, name: name || code })
 
-  if (stockData.error) return res.status(200).json(stockData)
-  if (stockData.suspended) return res.status(200).json(stockData)
+  if (stockData.error) return res.status(200).json({ ...stockData, type: 'holding' })
+  if (stockData.suspended) return res.status(200).json({ ...stockData, type: 'holding' })
 
   const profitPct = ((stockData.close - costPrice) / costPrice * 100).toFixed(2)
 
@@ -158,7 +181,7 @@ async function handleHolding(req, res) {
     `数据截至：${stockData.latestDate}`
 
   const text = await callMiniMax(holdingSystemPrompt, userContent)
-  return res.status(200).json({ text })
+  return res.status(200).json({ text, stockData: { ...stockData, profitPct: Number(profitPct), costPrice }, type: 'holding' })
 }
 
 async function handleNews(req, res) {
@@ -170,7 +193,7 @@ async function handleNews(req, res) {
 
   const userContent = `请分析以下新闻/公告对A股短线走势的影响：\n\n${content}`
   const text = await callMiniMax(newsSystemPrompt, userContent)
-  return res.status(200).json({ text })
+  return res.status(200).json({ text, type: 'news' })
 }
 
 export default async function handler(req, res) {

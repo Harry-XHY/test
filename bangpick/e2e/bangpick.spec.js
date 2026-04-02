@@ -15,7 +15,7 @@ test.describe('Desktop Tests', () => {
     await page.goto(BASE)
 
     // Header
-    await expect(page.locator('text=帮我选')).toBeVisible()
+    await expect(page.locator('h1:has-text("帮我选")')).toBeVisible()
 
     // Hero
     await expect(page.locator('text=纠结的时候')).toBeVisible()
@@ -207,7 +207,7 @@ test.describe('Desktop Tests', () => {
 // Mobile tests
 for (const device of MOBILE_DEVICES) {
   test.describe(`Mobile: ${device.name} (${device.width}x${device.height})`, () => {
-    test.use({ viewport: { width: device.width, height: device.height } })
+    test.use({ viewport: { width: device.width, height: device.height }, hasTouch: true })
 
     test('Landing page renders without overflow', async ({ page }) => {
       await page.goto(BASE)
@@ -217,7 +217,7 @@ for (const device of MOBILE_DEVICES) {
       const viewportWidth = await page.evaluate(() => window.innerWidth)
       expect(bodyWidth).toBeLessThanOrEqual(viewportWidth + 1)
 
-      await expect(page.locator('text=帮我选')).toBeVisible()
+      await expect(page.locator('h1:has-text("帮我选")')).toBeVisible()
       await expect(page.locator('text=纠结的时候')).toBeVisible()
 
       const firstCard = page.locator('.glass-card').filter({ has: page.locator('h5') }).first()

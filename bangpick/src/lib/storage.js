@@ -28,3 +28,7 @@ export function saveDecision(decision) {
   if (history.length > 100) history.pop()
   safeSet(HISTORY_KEY, history)
 }
+
+export function clearHistory() {
+  safeSet(HISTORY_KEY, [])
+}

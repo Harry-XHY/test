@@ -19,7 +19,8 @@ export function isSTStock(name) {
 // Fetch top 20 stocks in a sector by sector code, filtered to remove ST stocks
 // Returns [{ code, name, market }] or [] on error
 export async function fetchSectorStocks(sectorCode) {
-  const url = `https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=20&po=1&np=1&ut=bd1d9428fb35a36319c4a494aac219b6&fltt=2&invt=2&fid=f3&fs=b:${sectorCode}+f:!50&fields=f2,f3,f4,f12,f14,f100`
+  // f20=总市值, f12=代码, f14=名称, f100=市场
+  const url = `https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=30&po=1&np=1&ut=bd1d9428fb35a36319c4a494aac219b6&fltt=2&invt=2&fid=f3&fs=b:${sectorCode}+f:!50&fields=f2,f3,f4,f12,f14,f20,f100`
 
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 5000)
@@ -36,11 +37,13 @@ export async function fetchSectorStocks(sectorCode) {
 
     return items
       .map(item => ({
-        code:   String(item.f12),
-        name:   String(item.f14),
-        market: Number(item.f100), // 0=SZ, 1=SH
+        code:      String(item.f12),
+        name:      String(item.f14),
+        market:    Number(item.f100), // 0=SZ, 1=SH
+        marketCap: Number(item.f20) || 0, // 总市值（元）
       }))
       .filter(stock => !isSTStock(stock.name))
+      .filter(stock => stock.marketCap > 0 && stock.marketCap < 500e8 * 100) // 流通盘<500亿
   } catch {
     clearTimeout(timer)
     return []
@@ -49,7 +52,8 @@ export async function fetchSectorStocks(sectorCode) {
 
 // Fetch K-line data for a stock and calculate technical indicators
 // Returns full indicator object, or { code, name, error } / { code, name, suspended: true } on issues
-export async function fetchStockData({ code, market, name }) {
+// marketCap is optional — pass from fetchSectorStocks if available
+export async function fetchStockData({ code, market, name, marketCap }) {
   const url = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${market}.${code}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61&klt=101&fqt=1&lmt=90`
 
   const controller = new AbortController()
@@ -163,6 +167,7 @@ export async function fetchStockData({ code, market, name }) {
       macdSignal,
       volRatio:    round(volRatio, 2),
       aboveMA,
+      marketCap:   marketCap || null,
     }
   } catch {
     clearTimeout(timer)
