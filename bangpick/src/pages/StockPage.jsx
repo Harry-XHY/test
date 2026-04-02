@@ -121,7 +121,7 @@ function StockLandingView({ onFill, onStartHolding, onStartNews }) {
 }
 
 /* ===== Chat View ===== */
-function StockChatView({ messages, loading, onRetry, bottomRef }) {
+function StockChatView({ messages, loading, onRetry, onSend, bottomRef }) {
   return (
     <div className="space-y-4 pt-1">
       {messages.map((msg, i) => (
@@ -144,7 +144,7 @@ function StockChatView({ messages, loading, onRetry, bottomRef }) {
             <div className="max-w-[90%]">
               <div className="glass-card rounded-[20px] rounded-bl-md p-4">
                 <p className="text-sm mb-3" style={{ color: '#a8abb3' }}>{msg.content}</p>
-                <StockSearch compact onSend={(text) => msg.onSend?.(text)} />
+                <StockSearch compact onSend={onSend} />
               </div>
             </div>
           )}
@@ -152,7 +152,7 @@ function StockChatView({ messages, loading, onRetry, bottomRef }) {
             <div className="max-w-[90%]">
               <div className="glass-card rounded-[20px] rounded-bl-md p-4">
                 <p className="text-sm mb-3" style={{ color: '#a8abb3' }}>{msg.content}</p>
-                <SectorChips selected={null} onSelect={(sector) => msg.onSend?.(`${sector}板块有什么短线机会？`)} />
+                <SectorChips selected={null} onSelect={(sector) => onSend(`${sector}板块有什么短线机会？`)} />
               </div>
             </div>
           )}
@@ -243,7 +243,7 @@ export default function StockPage() {
           role: 'assistant',
           content: `检测到股票代码 ${intent.code}，请搜索确认并输入你的成本价：`,
           showSearch: true,
-          onSend: handleSend,
+          // onSend now passed directly via StockChatView prop
         }])
         setLoading(false)
         return
@@ -255,7 +255,7 @@ export default function StockPage() {
           role: 'assistant',
           content: '请选择你想分析的板块：',
           showSectorPicker: true,
-          onSend: handleSend,
+          // onSend now passed directly via StockChatView prop
         }])
         setLoading(false)
         return
@@ -329,7 +329,7 @@ export default function StockPage() {
       role: 'assistant',
       content: '请搜索你持有的股票，输入成本价后我来帮你诊断：',
       showSearch: true,
-      onSend: handleSend,
+      // onSend now passed directly via StockChatView prop
     }])
   }
 
@@ -372,7 +372,7 @@ export default function StockPage() {
         {!inChat ? (
           <StockLandingView onFill={handleFill} onStartHolding={handleStartHolding} onStartNews={handleStartNews} />
         ) : (
-          <StockChatView messages={messages} loading={loading} onRetry={handleRetry} bottomRef={bottomRef} />
+          <StockChatView messages={messages} loading={loading} onRetry={handleRetry} onSend={handleSend} bottomRef={bottomRef} />
         )}
       </main>
 
