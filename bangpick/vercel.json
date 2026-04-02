@@ -2,6 +2,7 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "framework": "vite",
+  "regions": ["hkg1"],
   "functions": {
     "api/stock-analyze.js": { "maxDuration": 60 },
     "api/stock-hot-sectors.js": { "maxDuration": 30 },
