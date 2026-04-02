@@ -15,7 +15,16 @@ export default function StockSearch({ onSubmit, onSend, compact }) {
     debounceRef.current = setTimeout(async () => {
       setLoading(true)
       const results = await searchStock(query)
-      setSuggestions(results.slice(0, 5))
+      const top = results.slice(0, 5)
+      // Auto-select if only one result or exact name/code match
+      const exact = top.find(s => s.name === query || s.code === query)
+      if (exact) {
+        handleSelect(exact)
+      } else if (top.length === 1) {
+        handleSelect(top[0])
+      } else {
+        setSuggestions(top)
+      }
       setLoading(false)
     }, 300)
     return () => clearTimeout(debounceRef.current)
