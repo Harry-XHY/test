@@ -107,6 +107,22 @@ body {
   to { opacity: 1; }
 }
 
+/* Stock chat animations */
+.stock-fade-in {
+  animation: stock-slide-up 0.3s ease-out both;
+}
+
+@keyframes stock-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .fortune-card {
   width: min(340px, 85vw);
   aspect-ratio: 2 / 3;

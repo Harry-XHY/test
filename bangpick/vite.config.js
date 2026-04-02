@@ -25,6 +25,28 @@ function vercelApiPlugin() {
     name: 'vercel-api-dev',
     configureServer(server) {
       loadEnv()
+
+      // Geocode reverse proxy — needs system proxy to reach nominatim
+      server.middlewares.use((req, res, next) => {
+        if (!req.url.startsWith('/api/geocode/')) return next()
+        const target = 'https://nominatim.openstreetmap.org' + req.url.replace('/api/geocode', '')
+        import('node:child_process').then(({ execFile }) => {
+          const env = { ...process.env, NO_PROXY: '', no_proxy: '' }
+          execFile('curl', ['-s', '-x', 'http://127.0.0.1:7890', '-m', '10', target, '-H', 'User-Agent: BangPick/1.0'],
+            { encoding: 'utf-8', timeout: 12000, env },
+            (err, stdout) => {
+              if (err || !stdout) {
+                res.writeHead(502, { 'Content-Type': 'application/json' })
+                res.end(JSON.stringify({ error: 'geocode failed' }))
+              } else {
+                res.writeHead(200, { 'Content-Type': 'application/json' })
+                res.end(stdout)
+              }
+            },
+          )
+        })
+      })
+
       server.middlewares.use(async (req, res, next) => {
         if (!req.url.startsWith('/api/stock-')) return next()
 
@@ -38,17 +60,12 @@ function vercelApiPlugin() {
           try {
             const mod = await import(`${fnPath}?t=${Date.now()}`)
             const fakeReq = { method: req.method, body: body ? JSON.parse(body) : {}, headers: req.headers }
-            const fakeRes = {
-              statusCode: 200,
-              status(code) { this.statusCode = code; return this },
-              json(data) {
-                res.writeHead(this.statusCode, { 'Content-Type': 'application/json' })
-                res.end(JSON.stringify(data))
-              },
-            }
-            await mod.default(fakeReq, fakeRes)
+            // Pass raw res for SSE streaming support
+            await mod.default(fakeReq, res)
           } catch (err) {
-            res.writeHead(500, { 'Content-Type': 'application/json' })
+            if (!res.headersSent) {
+              res.writeHead(500, { 'Content-Type': 'application/json' })
+            }
             res.end(JSON.stringify({ error: err.message }))
           }
         })
@@ -73,12 +90,7 @@ export default defineConfig({
         secure: false,
         rewrite: () => '/json',
       },
-      '/api/geocode': {
-        target: 'https://nominatim.openstreetmap.org',
-        changeOrigin: true,
-        secure: false,
-        rewrite: (path) => path.replace('/api/geocode', ''),
-      },
+      // geocode handled by vercelApiPlugin middleware (needs system proxy)
     },
   },
 })

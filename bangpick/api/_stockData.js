@@ -1,122 +1,143 @@
 // Shared A-share stock data module — NOT an HTTP endpoint
-// Imported by other API files for sector/stock data fetching and indicator calculation
+// Uses Sina Finance + Tencent Finance APIs for real-time data
+import https from 'node:https'
+import http from 'node:http'
 
-// Sector code map: display name → Eastmoney BK code
+// Sector code map: display name → Sina concept board node code
 export const SECTOR_MAP = {
-  'AI算力':   'BK1050',
-  '消费复苏': 'BK0997',
-  '新能源':   'BK0493',
-  '军工':     'BK0428',
-  '半导体':   'BK0447',
-  '医药生物': 'BK0465',
+  'AI算力':   'chgn_701051',
+  '消费复苏': 'chgn_700182',  // 白酒 as proxy for consumer recovery
+  '新能源':   'chgn_700410',  // 新能源车
+  '军工':     'chgn_700071',  // 航天军工
+  '半导体':   'chgn_700458',
+  '医药生物': 'chgn_730141',  // 生物医药
 }
 
-// Returns true if the stock name contains "ST" or "*ST" (suspended/warning stocks)
+// Derive market prefix for Tencent API: 6xx=sh, 3xx/0xx=sz
+function txPrefix(code) {
+  return code.startsWith('6') ? 'sh' : 'sz'
+}
+
+// Derive market code: 6xx=1(SH), others=0(SZ)
+function deriveMarket(code) {
+  return code.startsWith('6') ? 1 : 0
+}
+
+// HTTP GET with node:https (Node v24 undici drops connections to some CN servers)
+function httpsGet(url, timeout = 8000) {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
+      let data = ''
+      res.on('data', chunk => { data += chunk })
+      res.on('end', () => resolve(data))
+    })
+    req.on('error', reject)
+    req.setTimeout(timeout, () => { req.destroy(); reject(new Error('timeout')) })
+  })
+}
+
+// HTTP GET (plain http) for Sina Finance API
+function httpGet(url, timeout = 8000) {
+  return new Promise((resolve, reject) => {
+    const req = http.get(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'http://vip.stock.finance.sina.com.cn/' } }, (res) => {
+      let data = ''
+      res.on('data', chunk => { data += chunk })
+      res.on('end', () => resolve(data))
+    })
+    req.on('error', reject)
+    req.setTimeout(timeout, () => { req.destroy(); reject(new Error('timeout')) })
+  })
+}
+
+// Returns true if the stock name contains "ST" or "*ST"
 export function isSTStock(name) {
   return name.includes('ST') || name.includes('*ST')
 }
 
-// Fetch top 20 stocks in a sector by sector code, filtered to remove ST stocks
-// Returns [{ code, name, market }] or [] on error
+// Dynamically fetch sector stocks from Sina Finance API
+// Returns top 30 stocks by market cap, filtered: no ST, market cap > 50亿
 export async function fetchSectorStocks(sectorCode) {
-  // f20=总市值, f12=代码, f14=名称, f100=市场
-  const url = `https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=30&po=1&np=1&ut=bd1d9428fb35a36319c4a494aac219b6&fltt=2&invt=2&fid=f3&fs=b:${sectorCode}+f:!50&fields=f2,f3,f4,f12,f14,f20,f100`
-
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 5000)
-
+  const url = `http://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeData?page=1&num=40&sort=mktcap&asc=0&node=${sectorCode}`
   try {
-    const res = await fetch(url, { signal: controller.signal })
-    clearTimeout(timer)
+    const raw = await httpGet(url)
+    const stocks = JSON.parse(raw)
+    if (!Array.isArray(stocks) || stocks.length === 0) return []
 
-    if (!res.ok) return []
-
-    const json = await res.json()
-    const items = json?.data?.diff
-    if (!Array.isArray(items) || items.length === 0) return []
-
-    return items
-      .map(item => ({
-        code:      String(item.f12),
-        name:      String(item.f14),
-        market:    Number(item.f100), // 0=SZ, 1=SH
-        marketCap: Number(item.f20) || 0, // 总市值（元）
+    return stocks
+      .filter(s => {
+        // Filter out ST stocks, suspended stocks (0 volume), and micro-caps (<50亿)
+        if (isSTStock(s.name)) return false
+        if (s.volume === 0 || s.trade === '0.000') return false
+        const capYi = (s.mktcap || 0) / 10000 // Sina returns 万元
+        if (capYi < 50) return false
+        return true
+      })
+      .slice(0, 25)
+      .map(s => ({
+        code: s.code,
+        name: s.name,
+        market: deriveMarket(s.code),
+        marketCap: Math.round((s.mktcap || 0) / 10000 * 1e8), // Convert 万元 → 元
       }))
-      .filter(stock => !isSTStock(stock.name))
-      .filter(stock => stock.marketCap > 0 && stock.marketCap < 500e8 * 100) // 流通盘<500亿
   } catch {
-    clearTimeout(timer)
     return []
   }
 }
 
-// Fetch K-line data for a stock and calculate technical indicators
-// Returns full indicator object, or { code, name, error } / { code, name, suspended: true } on issues
-// marketCap is optional — pass from fetchSectorStocks if available
+// Fetch K-line data from Tencent and calculate technical indicators
 export async function fetchStockData({ code, market, name, marketCap }) {
-  const url = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${market}.${code}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61&klt=101&fqt=1&lmt=90`
-
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 5000)
+  const prefix = txPrefix(code)
+  const url = `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${prefix}${code},day,,,90,qfq`
 
   try {
-    const res = await fetch(url, { signal: controller.signal })
-    clearTimeout(timer)
-
-    if (!res.ok) return { code, name, error: '获取数据失败' }
-
-    const json = await res.json()
-    const klines = json?.data?.klines
+    const raw = await httpsGet(url)
+    const json = JSON.parse(raw)
+    const dayData = json?.data?.[`${prefix}${code}`]
+    const klines = dayData?.qfqday || dayData?.day
     if (!Array.isArray(klines) || klines.length < 60) {
       return { code, name, error: '历史数据不足' }
     }
 
-    // Parse each kline string: date,open,close,high,low,volume,...,changePercent,...,turnover
-    const candles = klines.map(line => {
-      const parts = line.split(',')
-      return {
-        date:          parts[0],
-        open:          parseFloat(parts[1]),
-        close:         parseFloat(parts[2]),
-        high:          parseFloat(parts[3]),
-        low:           parseFloat(parts[4]),
-        volume:        parseFloat(parts[5]),
-        changePercent: parseFloat(parts[8]),
-        turnover:      parseFloat(parts[10]),
-      }
-    })
+    // Tencent format: [date, open, close, high, low, volume]
+    const candles = klines.map(k => ({
+      date:   k[0],
+      open:   parseFloat(k[1]),
+      close:  parseFloat(k[2]),
+      high:   parseFloat(k[3]),
+      low:    parseFloat(k[4]),
+      volume: parseFloat(k[5]),
+    }))
 
-    // Guard: if the most recent candle has volume = 0, the stock is suspended
     const latest = candles[candles.length - 1]
-    if (latest.volume === 0) {
+    if (latest.volume === 0 || !isFinite(latest.volume) || !isFinite(latest.close)) {
       return { code, name, suspended: true }
     }
 
-    if (!isFinite(latest.volume) || !isFinite(latest.close)) {
-      return { code, name, suspended: true }
+    // Reject stocks with stale data (restructured/delisted) — >30 days old
+    const latestMs = new Date(latest.date).getTime()
+    if (Date.now() - latestMs > 30 * 86400000) {
+      return { code, name, error: '数据过期，该股票可能已重组或更名' }
     }
+
+    // Calculate change percent from previous close
+    const prevClose = candles.length >= 2 ? candles[candles.length - 2].close : latest.open
+    const changePercent = prevClose > 0 ? round((latest.close - prevClose) / prevClose * 100, 2) : 0
 
     const closes  = candles.map(c => c.close)
     const volumes = candles.map(c => c.volume)
     const n       = closes.length
 
-    // --- Moving Averages ---
     const ma10 = avg(closes.slice(n - 10))
     const ma20 = avg(closes.slice(n - 20))
 
-    // --- EMA / MACD ---
-    // EMA12: seed from first 12 closes, then apply multiplier
     const ema12arr = calcEMA(closes, 12, 2 / 13, 11 / 13)
-    // EMA26: seed from first 26 closes, then apply multiplier
     const ema26arr = calcEMA(closes, 26, 2 / 27, 25 / 27)
 
-    // DIF series starts at index 25 (first valid EMA26 value)
     const difArr = []
     for (let i = 25; i < n; i++) {
       difArr.push(ema12arr[i] - ema26arr[i])
     }
 
-    // DEA: seed from first 9 DIF values, then apply multiplier
     const deaArr = calcEMA(difArr, 9, 2 / 10, 8 / 10)
 
     const latestDea = deaArr[deaArr.length - 1]
@@ -128,7 +149,6 @@ export async function fetchStockData({ code, market, name, marketCap }) {
     const dea  = latestDea
     const macd = (dif - dea) * 2
 
-    // MACD signal based on the last two DIF/DEA values
     const prevDif = difArr[difArr.length - 2]
     const prevDea = deaArr[deaArr.length - 2]
     let macdSignal
@@ -142,23 +162,22 @@ export async function fetchStockData({ code, market, name, marketCap }) {
       macdSignal = 'below_zero'
     }
 
-    // Volume ratio: avg of last 3 volumes / avg of 10 days before recent 3
     const recentVols = volumes.slice(n - 3)
     const baseVols   = volumes.slice(n - 13, n - 3)
     const baseAvg    = avg(baseVols)
     const volRatio   = baseAvg === 0 ? 1.0 : parseFloat((avg(recentVols) / baseAvg).toFixed(2))
 
-    const close  = latest.close
+    const close   = latest.close
     const aboveMA = close > ma10 && close > ma20
 
     return {
       code,
       name,
-      market,
+      market: market ?? deriveMarket(code),
       suspended:   false,
       latestDate:  latest.date,
       close,
-      change:      latest.changePercent,
+      change:      changePercent,
       ma10:        round(ma10, 4),
       ma20:        round(ma20, 4),
       dif:         round(dif, 4),
@@ -167,36 +186,156 @@ export async function fetchStockData({ code, market, name, marketCap }) {
       macdSignal,
       volRatio:    round(volRatio, 2),
       aboveMA,
-      marketCap:   marketCap || null,
+      marketCap:   marketCap ?? null,
     }
-  } catch {
-    clearTimeout(timer)
+  } catch (err) {
     return { code, name, error: '获取数据失败' }
   }
 }
 
+// Fetch major A-share index data via Sina real-time API
+// Returns array: [{ name, code, close, change, volume, amount }]
+export async function fetchMarketIndices() {
+  const INDEX_NAMES = ['上证指数', '深证成指', '创业板指']
+  const symbols = 's_sh000001,s_sz399001,s_sz399006'
+  const url = `http://hq.sinajs.cn/list=${symbols}`
+  try {
+    const raw = await httpGet(url)
+    const lines = raw.split('\n').filter(l => l.includes('='))
+    return lines.map((line, i) => {
+      const parts = line.split('"')[1]?.split(',')
+      if (!parts || parts.length < 6) return null
+      return {
+        name: INDEX_NAMES[i] || parts[0],
+        close: parseFloat(parts[1]),
+        change: parseFloat(parts[3]),
+        volume: parseFloat(parts[4]),   // 万手
+        amount: parseFloat(parts[5]),   // 亿元
+      }
+    }).filter(Boolean)
+  } catch { return [] }
+}
+
+// Fetch sector-level overview: avg change, top gainer for each sector
+export async function fetchSectorOverview() {
+  const results = []
+  for (const [name, code] of Object.entries(SECTOR_MAP)) {
+    const url = `http://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeData?page=1&num=10&sort=changepercent&asc=0&node=${code}`
+    try {
+      const raw = await httpGet(url, 5000)
+      const stocks = JSON.parse(raw)
+      if (!Array.isArray(stocks) || stocks.length === 0) continue
+      const valid = stocks.filter(s => !isSTStock(s.name) && s.volume > 0)
+      const avgChange = valid.length > 0
+        ? round(valid.reduce((s, v) => s + parseFloat(v.changepercent || 0), 0) / valid.length, 2)
+        : 0
+      const top = valid[0]
+      results.push({
+        sector: name,
+        avgChange,
+        topStock: top ? { code: top.code, name: top.name, change: parseFloat(top.changepercent || 0) } : null,
+        upCount: valid.filter(s => parseFloat(s.changepercent) > 0).length,
+        totalCount: valid.length,
+      })
+    } catch { /* skip failed sector */ }
+  }
+  return results.sort((a, b) => b.avgChange - a.avgChange)
+}
+
+// --- Scoring System (100-point weighted) ---
+
+// Calculate stock score for buy recommendation
+// Returns { total, trend, momentum, volume, detail }
+export function calcStockScore(stockData, hotSectors = []) {
+  if (!stockData || stockData.error || stockData.suspended) {
+    return { total: 0, trend: 0, momentum: 0, volume: 0, theme: 0, detail: {} }
+  }
+
+  // 1. Trend score (30 pts max) — MA position
+  let trend = 0
+  const aboveMA10 = stockData.close > stockData.ma10
+  const aboveMA20 = stockData.close > stockData.ma20
+  if (aboveMA10 && aboveMA20) {
+    trend = 30  // Both above → full score
+  } else if (aboveMA10) {
+    trend = 15  // Only above MA10
+  }
+
+  // 2. Momentum score (30 pts max) — MACD
+  let momentum = 0
+  const { macdSignal, dif } = stockData
+  if (macdSignal === 'golden_cross' && dif > 0) {
+    momentum = 30  // Golden cross + above zero
+  } else if (macdSignal === 'above_zero') {
+    momentum = 20  // Above zero (strong pullback)
+  } else if (macdSignal === 'golden_cross') {
+    momentum = 10  // Golden cross below zero
+  }
+  // dead_cross or below_zero → 0
+
+  // 3. Volume score (25 pts max) — volume ratio
+  let volume = 0
+  const vr = stockData.volRatio
+  if (vr >= 1.5) {
+    volume = 25  // 50%+ amplification
+  } else if (vr >= 1.3) {
+    volume = 20  // 30-50% amplification
+  } else if (vr >= 1.0) {
+    volume = 10  // 0-30% amplification
+  }
+  // shrinking → 0
+
+  // 4. Theme score (15 pts max) — hot sector match
+  let theme = 0
+  // hotSectors is sorted by avgChange desc, top 3 are "hot"
+  if (hotSectors.length > 0 && stockData.sectorMatch) {
+    const idx = hotSectors.findIndex(s => s.sector === stockData.sectorMatch)
+    if (idx >= 0 && idx < 3) {
+      theme = 15  // Top 3 hot sector
+    } else if (idx >= 0) {
+      theme = 10  // Other hot sector
+    }
+  }
+
+  const total = trend + momentum + volume + theme
+
+  return {
+    total,
+    trend,
+    momentum,
+    volume,
+    theme,
+    detail: {
+      aboveMA10,
+      aboveMA20,
+      macdSignal,
+      volRatio: vr,
+      sectorMatch: stockData.sectorMatch || null,
+    },
+  }
+}
+
+// Determine position size based on score
+export function getPositionAdvice(score) {
+  if (score >= 90) return { verdict: '可以买入', position: '20%-30%', level: 'strong' }
+  if (score >= 70) return { verdict: '可以买入', position: '10%-15%', level: 'moderate' }
+  return { verdict: '暂不建议买入', position: '0%', level: 'weak' }
+}
+
 // --- Helpers ---
 
-// Simple average of an array of numbers
 function avg(arr) {
   return arr.reduce((s, v) => s + v, 0) / arr.length
 }
 
-// Round to N decimal places
 function round(val, decimals) {
   return parseFloat(val.toFixed(decimals))
 }
 
-// Generic EMA calculation using SMA seed.
-// seedLen: number of values to average for the seed
-// k: fast multiplier (e.g. 2/13)
-// mk: slow multiplier (e.g. 11/13 = 1 - k)
-// Returns an array of length equal to values.length, with nulls before the seed.
 function calcEMA(values, seedLen, k, mk) {
   const result = new Array(values.length).fill(null)
   if (values.length < seedLen) return result
 
-  // Seed value is the simple average of the first seedLen elements
   let ema = avg(values.slice(0, seedLen))
   result[seedLen - 1] = ema
 
