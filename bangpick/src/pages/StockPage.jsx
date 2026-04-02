@@ -4,7 +4,7 @@ import StockMessageBubble from '../components/StockChat'
 import StockSearch from '../components/StockSearch'
 import SectorChips from '../components/SectorChips'
 import BottomNav from '../components/BottomNav'
-import { analyzeStock } from '../lib/stockApi'
+import { analyzeStock, searchStock } from '../lib/stockApi'
 import { getHoldings, addHolding } from '../lib/stockStorage'
 import { STOCK_FEATURES, STOCK_EXAMPLES, SECTORS, detectIntent } from '../lib/stockPrompts'
 import { getStockChat, saveStockChat, clearStockChat } from '../lib/stockStorage'
@@ -263,17 +263,27 @@ export default function StockPage() {
 
       let payload
       if (intent.type === 'holding') {
-        // Auto-detect market from code prefix
-        const market = intent.code.startsWith('6') ? 1 : 0
-        payload = {
-          type: 'holding',
-          code: intent.code,
-          market,
-          name: intent.name || intent.code,
-          costPrice: intent.costPrice,
+        let { code, name, costPrice } = intent
+        let market = code ? (code.startsWith('6') ? 1 : 0) : 0
+
+        // If we have name but no code, search for it
+        if (!code && name) {
+          const results = await searchStock(name)
+          if (results.length > 0) {
+            const match = results[0]
+            code = match.code
+            name = match.name
+            market = match.market
+          }
         }
-        // Save to holdings
-        addHolding({ code: intent.code, name: intent.name || intent.code, market, costPrice: intent.costPrice })
+
+        if (!code) {
+          // Still no code — pass the raw text to AI for best-effort analysis
+          payload = { type: 'holding', code: name || trimmed, market: 0, name: name || trimmed, costPrice }
+        } else {
+          payload = { type: 'holding', code, market, name: name || code, costPrice }
+          addHolding({ code, name: name || code, market, costPrice })
+        }
       } else if (intent.type === 'news') {
         payload = { type: 'news', content: intent.content || trimmed }
       } else {

@@ -40,9 +40,9 @@ export const STOCK_EXAMPLES = [
 export function detectIntent(text) {
   const t = text.trim()
 
-  // 1. Check for holding pattern: 6-digit code + price
+  // 1. Check for holding pattern: code or name + price
   const holdingMatch = parseHoldingFromText(t)
-  if (holdingMatch.code && holdingMatch.costPrice) {
+  if ((holdingMatch.code || holdingMatch.name) && holdingMatch.costPrice) {
     return { type: 'holding', ...holdingMatch }
   }
 
@@ -78,9 +78,25 @@ export function detectIntent(text) {
 export function parseHoldingFromText(text) {
   const result = { code: null, name: null, costPrice: null }
 
+  // Match 6-digit stock code
   const codeMatch = text.match(/\b(\d{6})\b/)
   if (codeMatch) {
     result.code = codeMatch[1]
+  }
+
+  // Match stock name: 2-4 Chinese chars followed by common suffixes
+  if (!result.code) {
+    const nameMatch = text.match(/([\u4e00-\u9fff]{2,6}(?:股份|集团|科技|电子|医药|能源|银行|证券|保险|汽车|电力|通信|光电|材料|化工|环保|生物|机械|航天|航空|软件|信息|智能|半导|新材))/)
+    if (nameMatch) {
+      result.name = nameMatch[1]
+    }
+    // Also match "看看XXX" pattern where XXX is 2-4 Chinese chars
+    if (!result.name) {
+      const lookMatch = text.match(/看[看]?\s*([\u4e00-\u9fff]{2,6})[，,\s]/)
+      if (lookMatch) {
+        result.name = lookMatch[1]
+      }
+    }
   }
 
   const costPatterns = [
