@@ -1,3 +1,5 @@
+import { schedulePush } from './cloudSync.js'
+
 const HISTORY_KEY = 'bangpick_history'
 
 export function safeGet(key, fallback) {
@@ -27,8 +29,10 @@ export function saveDecision(decision) {
   history.unshift(decision)
   if (history.length > 100) history.pop()
   safeSet(HISTORY_KEY, history)
+  schedulePush('history', () => safeGet(HISTORY_KEY, []))
 }
 
 export function clearHistory() {
   safeSet(HISTORY_KEY, [])
+  schedulePush('history', () => [])
 }

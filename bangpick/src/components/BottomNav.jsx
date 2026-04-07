@@ -13,6 +13,10 @@ export default function BottomNav() {
         <span className="material-symbols-outlined text-xl">candlestick_chart</span>
         炒股助手
       </Link>
+      <Link to="/watchlist" className={`flex-1 flex flex-col items-center py-3 gap-1 text-xs transition-colors ${pathname === '/watchlist' ? 'text-[#b6a0ff]' : 'text-[#72757d]'}`}>
+        <span className="material-symbols-outlined text-xl">bookmark_star</span>
+        自选股
+      </Link>
     </nav>
   )
 }

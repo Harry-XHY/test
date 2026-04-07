@@ -20,12 +20,12 @@ export const STOCK_FEATURES = [
     fill: null,
   },
   {
-    key: 'market',
-    title: '大盘诊断',
-    desc: '今日大盘情绪+板块热度+操作建议',
-    icon: 'speed',
+    key: 'double_golden',
+    title: '推荐双金叉',
+    desc: 'MACD金叉+均线金叉短线机会',
+    icon: 'auto_graph',
     color: 'var(--green)',
-    fill: '帮我看看今天大盘怎么样',
+    fill: null,
   },
 ]
 

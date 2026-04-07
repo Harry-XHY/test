@@ -1,3 +1,5 @@
+import { schedulePush } from './cloudSync.js'
+
 const STORAGE_KEY = 'bangpick_holdings'
 
 export function getHoldings() {
@@ -19,12 +21,14 @@ export function addHolding({ code, name, market, costPrice }) {
     holdings.push(entry)
   }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(holdings))
+  schedulePush('holdings', () => getHoldings())
   return holdings
 }
 
 export function removeHolding(code) {
   const holdings = getHoldings().filter(h => h.code !== code)
   localStorage.setItem(STORAGE_KEY, JSON.stringify(holdings))
+  schedulePush('holdings', () => getHoldings())
   return holdings
 }
 
@@ -44,9 +48,11 @@ export function saveStockChat(messages) {
     // Keep last 50 messages max
     const trimmed = messages.slice(-50)
     localStorage.setItem(CHAT_KEY, JSON.stringify(trimmed))
+    schedulePush('stockChat', () => getStockChat())
   } catch { /* quota exceeded */ }
 }
 
 export function clearStockChat() {
   localStorage.removeItem(CHAT_KEY)
+  schedulePush('stockChat', () => [])
 }

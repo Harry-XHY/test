@@ -6,8 +6,15 @@
   "functions": {
     "api/stock-analyze.js": { "maxDuration": 60 },
     "api/stock-hot-sectors.js": { "maxDuration": 30 },
-    "api/stock-search.js": { "maxDuration": 15 }
+    "api/stock-search.js": { "maxDuration": 15 },
+    "api/chat.js": { "maxDuration": 30 },
+    "api/cron-check-alerts.js": { "maxDuration": 60 },
+    "api/cron-snapshot.js": { "maxDuration": 60 }
   },
+  "crons": [
+    { "path": "/api/cron-check-alerts", "schedule": "0 7 * * 1-5" },
+    { "path": "/api/cron-snapshot", "schedule": "30 7 * * 1-5" }
+  ],
   "rewrites": [
     { "source": "/api/ip-location", "destination": "https://ipinfo.io/json" },
     { "source": "/api/geocode/:path*", "destination": "https://nominatim.openstreetmap.org/:path*" },

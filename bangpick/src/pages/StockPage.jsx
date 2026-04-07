@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import ChatInput from '../components/ChatInput'
 import StockMessageBubble from '../components/StockChat'
 import StockSearch from '../components/StockSearch'
 import SectorChips from '../components/SectorChips'
 import BottomNav from '../components/BottomNav'
+import PnLChart from '../components/PnLChart'
 import { analyzeStockStream, searchStock } from '../lib/stockApi'
 import { getHoldings, addHolding, removeHolding } from '../lib/stockStorage'
 import { STOCK_FEATURES, STOCK_EXAMPLES, SECTORS, detectIntent } from '../lib/stockPrompts'
@@ -12,11 +14,11 @@ import { getStockChat, saveStockChat, clearStockChat } from '../lib/stockStorage
 const FEATURE_COLORS = {
   recommend: 'var(--primary)',
   holding: 'var(--secondary)',
-  market: 'var(--green)',
+  double_golden: 'var(--green)',
 }
 
 /* ===== Landing View ===== */
-function StockLandingView({ onFill, onStartHolding, onStartRecommend, holdings, setHoldings }) {
+function StockLandingView({ onFill, onStartHolding, onStartRecommend, onStartDoubleGolden, holdings, setHoldings }) {
   const [hotSectors, setHotSectors] = useState([])
 
   useEffect(() => {
@@ -51,7 +53,7 @@ function StockLandingView({ onFill, onStartHolding, onStartRecommend, holdings, 
           短线交易<span className="text-gradient">智能助手</span>
         </h2>
         <p className="text-[13px] leading-relaxed max-w-xs mx-auto" style={{ color: '#72757d' }}>
-          选股推荐 · 持仓诊断 · 大盘风向<br />
+          选股推荐 · 持仓诊断 · 双金叉形态<br />
           <span style={{ color: '#f8a171', fontSize: '11px' }}>数据仅供参考，不构成投资建议</span>
         </p>
       </section>
@@ -66,8 +68,8 @@ function StockLandingView({ onFill, onStartHolding, onStartRecommend, holdings, 
                 key={f.key}
                 onClick={() => {
                   if (f.key === 'holding') onStartHolding()
-                  else if (f.key === 'market') onFill(f.fill)
                   else if (f.key === 'recommend') onStartRecommend()
+                  else if (f.key === 'double_golden') onStartDoubleGolden()
                   else if (f.fill) onFill(f.fill)
                 }}
                 className="flex flex-col items-center gap-2 p-4 rounded-2xl text-center active:scale-[0.96] transition-all duration-200 group"
@@ -115,6 +117,7 @@ function StockLandingView({ onFill, onStartHolding, onStartRecommend, holdings, 
               </div>
             ))}
           </div>
+          <PnLChart />
         </section>
       )}
 
@@ -232,9 +235,11 @@ export default function StockPage() {
   const [loading, setLoading] = useState(false)
   const [holdings, setHoldings] = useState(() => getHoldings())
   const [appHeight, setAppHeight] = useState('100%')
+  const [searchParams, setSearchParams] = useSearchParams()
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
   const abortRef = useRef(null)
+  const initialQueryHandled = useRef(false)
 
   // Persist chat (debounced to avoid thrashing during streaming)
   const saveTimer = useRef(null)
@@ -271,13 +276,85 @@ export default function StockPage() {
     return () => abortRef.current?.()
   }, [])
 
-  const handleSend = useCallback(async (text) => {
-    const trimmed = text.trim()
+  // Auto-send when navigated with ?q=... (e.g. from watchlist)
+  useEffect(() => {
+    if (initialQueryHandled.current) return
+    const q = searchParams.get('q')
+    if (!q) return
+    initialQueryHandled.current = true
+    // Strip the param so refresh doesn't re-trigger
+    setSearchParams({}, { replace: true })
+    handleSendRef.current?.(q)
+  }, [searchParams, setSearchParams])
+
+  // Ref to handleSend so the effect above doesn't depend on the callback identity
+  const handleSendRef = useRef(null)
+
+  const handleSend = useCallback(async (text, options = {}) => {
+    const trimmed = typeof text === 'string' ? text.trim() : ''
     if (!trimmed || loading) return
 
     const userMsg = { role: 'user', content: trimmed }
     setMessages(prev => [...prev, userMsg])
     setLoading(true)
+
+    // Bypass intent detection when an override payload is supplied (e.g. 双金叉)
+    if (options.overridePayload) {
+      const overridePayload = options.overridePayload
+      const assistantMsgIdx = { current: -1 }
+      const abort = analyzeStockStream(overridePayload, {
+        onMeta(meta) {
+          setMessages(prev => {
+            assistantMsgIdx.current = prev.length
+            return [...prev, {
+              role: 'assistant',
+              apiResponse: { ...meta, text: '' },
+              content: '',
+              _streaming: true,
+            }]
+          })
+          setLoading(false)
+        },
+        onDelta(chunk) {
+          setMessages(prev => {
+            const idx = assistantMsgIdx.current
+            if (idx < 0 || idx >= prev.length) return prev
+            const updated = [...prev]
+            const msg = { ...updated[idx] }
+            const apiRes = { ...msg.apiResponse }
+            apiRes.text = (apiRes.text || '') + chunk
+            msg.apiResponse = apiRes
+            msg.content = apiRes.text
+            updated[idx] = msg
+            return updated
+          })
+        },
+        onDone() {
+          setLoading(false)
+          setMessages(prev => {
+            const idx = assistantMsgIdx.current
+            if (idx < 0 || idx >= prev.length) return prev
+            const updated = [...prev]
+            updated[idx] = { ...updated[idx], _streaming: false }
+            return updated
+          })
+        },
+        onError(err) {
+          setLoading(false)
+          setMessages(prev => {
+            if (assistantMsgIdx.current >= 0) return prev
+            return [...prev, {
+              role: 'assistant',
+              content: err.message || '分析失败，请稍后重试',
+              error: true,
+              _retryText: trimmed,
+            }]
+          })
+        },
+      })
+      abortRef.current = abort
+      return
+    }
 
     let intent = detectIntent(trimmed)
 
@@ -430,6 +507,9 @@ export default function StockPage() {
     abortRef.current = abort
   }, [loading])
 
+  // Keep ref in sync so the URL-param effect can call latest handleSend
+  useEffect(() => { handleSendRef.current = handleSend }, [handleSend])
+
   function handleRetry(errorMsg) {
     setMessages(prev => prev.filter(m => m !== errorMsg))
     handleSend(errorMsg._retryText)
@@ -455,6 +535,17 @@ export default function StockPage() {
 
   function handleStartRecommend() {
     handleSend('推荐今日短线机会')
+  }
+
+  function handleStartDoubleGolden() {
+    handleSend('🔥 帮我找今日双金叉短线机会', {
+      overridePayload: {
+        type: 'recommend',
+        filter: 'double_golden_cross',
+        sector: null,
+        query: '推荐今日双金叉短线机会',
+      },
+    })
   }
 
 
@@ -486,7 +577,7 @@ export default function StockPage() {
       {/* Content */}
       <main className="flex-1 overflow-y-auto max-w-xl mx-auto w-full px-6 pt-8 pb-4">
         {!inChat ? (
-          <StockLandingView onFill={handleFill} onStartHolding={handleStartHolding} onStartRecommend={handleStartRecommend} holdings={holdings} setHoldings={setHoldings} />
+          <StockLandingView onFill={handleFill} onStartHolding={handleStartHolding} onStartRecommend={handleStartRecommend} onStartDoubleGolden={handleStartDoubleGolden} holdings={holdings} setHoldings={setHoldings} />
         ) : (
           <StockChatView messages={messages} loading={loading} onRetry={handleRetry} onSend={handleSend} bottomRef={bottomRef} />
         )}

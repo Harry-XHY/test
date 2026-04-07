@@ -163,10 +163,31 @@ function ChatView({ messages, loading, onSend, onRetry, bottomRef }) {
   )
 }
 
+// Session-scoped chat context — persists across page reloads but clears
+// when the tab is closed. Keeps the last few turns so follow-up questions
+// like "再便宜点的呢？" can hit the model with prior options.
+const SESSION_CHAT_KEY = 'bangpick_chat_session'
+const CONTEXT_WINDOW = 6 // last 6 messages = ~3 turns
+
+function loadSessionChat() {
+  try {
+    const raw = sessionStorage.getItem(SESSION_CHAT_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch { return [] }
+}
+
+function persistSessionChat(messages) {
+  try {
+    // Drop transient fields, cap to prevent unbounded growth
+    const trimmed = messages.slice(-20).map(({ _retryText, ...rest }) => rest)
+    sessionStorage.setItem(SESSION_CHAT_KEY, JSON.stringify(trimmed))
+  } catch { /* quota exceeded — ignore */ }
+}
+
 /* ===== Main Page ===== */
 export default function ChatPage() {
   const { scenarios, examples } = useMemo(() => getRandomContent(), [])
-  const [messages, setMessages] = useState([])
+  const [messages, setMessages] = useState(() => loadSessionChat())
   const [loading, setLoading] = useState(false)
   const [locationText, setLocationText] = useState('')
   const [appHeight, setAppHeight] = useState('100%')
@@ -199,15 +220,24 @@ export default function ChatPage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
+  // Persist chat to sessionStorage so brief navigation away preserves context
+  useEffect(() => {
+    persistSessionChat(messages)
+  }, [messages])
+
   async function handleSend(text) {
+    if (typeof text !== 'string' || !text.trim()) return
     const userMsg = { role: 'user', content: text }
     setMessages((prev) => [...prev, userMsg])
     setLoading(true)
 
     try {
       const systemPrompt = buildSystemPrompt(locationText)
+      // Send only the trailing context window so prompt size stays bounded
+      // while still preserving multi-turn follow-ups ("再便宜点的呢？").
       const apiMessages = [...messages, userMsg]
         .filter((m) => m.role === 'user' || m.role === 'assistant')
+        .slice(-CONTEXT_WINDOW)
         .map((m) => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '' }))
 
       const result = await sendMessage(systemPrompt, apiMessages)
@@ -277,7 +307,7 @@ export default function ChatPage() {
             </button>
             {inChat && (
               <button
-                onClick={() => setMessages([])}
+                onClick={() => { setMessages([]); try { sessionStorage.removeItem(SESSION_CHAT_KEY) } catch { /* ignore */ } }}
                 className="w-8 h-8 rounded-full grid place-items-center text-[var(--muted)] text-sm hover:bg-white/10 transition-colors"
               >
                 <span className="material-symbols-outlined text-[18px]">close</span>
