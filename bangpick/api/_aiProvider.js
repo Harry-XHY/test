@@ -142,8 +142,9 @@ async function geminiStream({ system, messages, maxTokens = 2048, onChunk }) {
 // Key 申请：https://open.bigmodel.cn → 个人中心 → API Keys
 
 const ZHIPU_BASE = 'https://open.bigmodel.cn/api/paas/v4'
-// GLM-4.7-Flash 指令遵循比 4.5 强很多，对 stock prompts 这种严格格式输出场景更稳
-const ZHIPU_MODEL = process.env.ZHIPU_MODEL || 'glm-4.7-flash'
+// GLM-4.5-Flash 是智谱永久免费的开放模型，指令遵循对 stock prompts 够用。
+// （曾经错写成 glm-4.7-flash，线上 404 导致所有 AI 分析返回「暂时不可用」。）
+const ZHIPU_MODEL = process.env.ZHIPU_MODEL || 'glm-4.5-flash'
 
 function zhipuAuthHeaders() {
   const key = process.env.ZHIPU_API_KEY
