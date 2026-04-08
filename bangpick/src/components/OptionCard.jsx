@@ -1,11 +1,26 @@
-export default function OptionCard({ option, rank, onVote, showVote }) {
+export default function OptionCard({ option, rank, onVote, showVote, onSelect }) {
   const rankEmojis = ['🥇', '🥈', '🥉']
+
+  // Two click modes:
+  //   showVote=true  → vote panel (SharePage) — clicking casts a vote
+  //   onSelect given → chat recommendation (ChatPage) — clicking confirms pick
+  const handleClick = showVote
+    ? () => onVote?.(option.id)
+    : onSelect
+      ? () => onSelect(`就选${option.name}`)
+      : undefined
+
+  const clickable = Boolean(handleClick)
 
   return (
     <div
-      className="bg-slate-700/50 rounded-xl p-4 border border-slate-600 hover:border-blue-500 transition-colors"
-      onClick={showVote ? () => onVote?.(option.id) : undefined}
-      role={showVote ? 'button' : undefined}
+      className={`bg-slate-700/50 rounded-xl p-4 border border-slate-600 transition-colors ${
+        clickable ? 'hover:border-blue-500 cursor-pointer active:scale-[0.98]' : ''
+      }`}
+      onClick={handleClick}
+      role={clickable ? 'button' : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClick() } } : undefined}
     >
       <div className="flex items-start justify-between mb-2">
         <h3 className="text-lg font-semibold text-white">
