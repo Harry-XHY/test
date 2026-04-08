@@ -1,6 +1,6 @@
-import https from 'node:https'
 import pLimit from 'p-limit'
 import { fetchStockData, fetchSectorStocks, fetchMarketIndices, fetchSectorOverview, SECTOR_MAP, isSTStock, calcStockScore, getPositionAdvice } from './_stockData.js'
+import { chatStream } from './_aiProvider.js'
 import {
   RISK_FOOTER,
   recommendSystemPrompt,
@@ -11,60 +11,34 @@ import {
   qaSystemPrompt,
 } from './_prompts.js'
 
-// ── Prompts moved to ./_prompts.js (Sprint 1, module 5a refactor) ──
-
-
-// Stream MiniMax response via SSE — calls onChunk(text) for each text delta
+// Stream AI response via the configured provider — onChunk(text) per text delta
 function streamMiniMax(systemPrompt, userContent, onChunk) {
-  const body = JSON.stringify({
-    model: 'MiniMax-M2.7',
-    max_tokens: 2048,
-    stream: true,
+  return chatStream({
     system: systemPrompt,
     messages: [{ role: 'user', content: userContent }],
-  })
-
-  return new Promise((resolve, reject) => {
-    const req = https.request('https://api.minimaxi.com/anthropic/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.MINIMAX_API_KEY}`,
-        'Content-Length': Buffer.byteLength(body),
-      },
-    }, (res) => {
-      let buf = ''
-      res.on('data', chunk => {
-        buf += chunk.toString()
-        // Parse SSE lines
-        const lines = buf.split('\n')
-        buf = lines.pop() // keep incomplete line
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue
-          const payload = line.slice(6).trim()
-          if (payload === '[DONE]') continue
-          try {
-            const evt = JSON.parse(payload)
-            // Anthropic streaming: content_block_delta with type text_delta
-            if (evt.type === 'content_block_delta' && evt.delta?.type === 'text_delta') {
-              onChunk(evt.delta.text)
-            }
-          } catch {}
-        }
-      })
-      res.on('end', () => resolve())
-      res.on('error', reject)
-    })
-    req.on('error', reject)
-    req.setTimeout(90000, () => { req.destroy(); reject(new Error('timeout')) })
-    req.write(body)
-    req.end()
+    maxTokens: 2048,
+    onChunk,
   })
 }
 
 // SSE helper: write an event to the raw response
 function sseWrite(res, event, data) {
   res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+}
+
+// Open the SSE response and flush headers immediately. The 2KB padding comment
+// forces intermediaries (Vercel proxy, dev middleware, nginx) to send the
+// headers downstream right away instead of waiting for the first real chunk.
+// This is what lets the frontend leave the "loading" state before the slow
+// data fetch + AI cold start finish.
+function sseOpen(res) {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  })
+  res.write(': ' + ' '.repeat(2048) + '\n\n')
 }
 
 function buildStockDataStr(stocks) {
@@ -81,6 +55,11 @@ function buildStockDataStr(stocks) {
 async function handleRecommend(req, res) {
   const { sector, query, filter } = req.body
   const isDoubleGolden = filter === 'double_golden_cross'
+
+  // Open SSE early — sector scanning takes seconds and we don't want the
+  // user staring at the loading bubble that whole time.
+  sseOpen(res)
+  sseWrite(res, 'meta', { type: isDoubleGolden ? 'recommend_double_golden' : 'recommend' })
 
   const sectorsToScan = sector && SECTOR_MAP[sector]
     ? [{ name: sector, code: SECTOR_MAP[sector] }]
@@ -134,14 +113,15 @@ async function handleRecommend(req, res) {
   }
 
   if (filtered.length === 0) {
-    // Non-streaming fallback for no-opportunity
-    res.writeHead(200, { 'Content-Type': 'application/json' })
-    return res.end(JSON.stringify({
+    // Stream is already open — emit no_opportunity as a meta + done.
+    sseWrite(res, 'meta', {
       type: 'no_opportunity',
       message: isDoubleGolden
         ? `当前市场暂时没有同时出现"MACD金叉+均线金叉"的双金叉机会，这种形态本身就稀缺，建议耐心观望等待更明确的信号。\n\n${RISK_FOOTER}`
         : `当前暂无符合条件的短线机会，建议观望等待更好时机。\n\n${RISK_FOOTER}`,
-    }))
+    })
+    sseWrite(res, 'done', {})
+    return res.end()
   }
 
   const top3 = filtered.slice(0, 3)
@@ -151,14 +131,8 @@ async function handleRecommend(req, res) {
     ? `用户问题：${query || '推荐今日双金叉短线机会'}\n\n以下是${sectorLabel}筛选出的【双金叉形态】潜力股数据：\n${stockDataStr}`
     : `用户问题：${query || '推荐今日短线机会'}\n\n以下是${sectorLabel}筛选出的技术面较强股票数据：\n${stockDataStr}`
 
-  // Start SSE stream
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive',
-  })
-
-  // Send stock data immediately
+  // Second meta — fills in the picked stockData. Frontend merges into the
+  // existing message instead of creating a new bubble.
   sseWrite(res, 'meta', { type: isDoubleGolden ? 'recommend_double_golden' : 'recommend', stockData: top3 })
 
   try {
@@ -183,19 +157,23 @@ async function handleHolding(req, res) {
     return res.end(JSON.stringify({ error: '缺少股票代码或市场参数' }))
   }
 
+  // Open SSE + early meta BEFORE the slow fetch so the loading bubble flips
+  // to streaming state immediately. The bubble renders without StockDataCard
+  // when stockData lacks fields, then a second meta event below merges in
+  // the real fetched data.
+  sseOpen(res)
+  sseWrite(res, 'meta', { type: 'holding', stockData: { code, name: name || code, market } })
+
   // Fetch stock data and hot sectors in parallel
   const [stockData, hotSectors] = await Promise.all([
     fetchStockData({ code, market, name: name || code }),
     fetchSectorOverview(),
   ])
 
-  if (stockData.error) {
-    res.writeHead(200, { 'Content-Type': 'application/json' })
-    return res.end(JSON.stringify({ ...stockData, type: 'holding' }))
-  }
-  if (stockData.suspended) {
-    res.writeHead(200, { 'Content-Type': 'application/json' })
-    return res.end(JSON.stringify({ ...stockData, type: 'holding' }))
+  if (stockData.error || stockData.suspended) {
+    sseWrite(res, 'meta', { type: 'holding', stockData: { ...stockData, code, name: name || code } })
+    sseWrite(res, 'done', {})
+    return res.end()
   }
 
   // Calculate weighted score (100-point system)
@@ -243,13 +221,8 @@ async function handleHolding(req, res) {
     `成交量：${volDesc}\n` +
     `数据截至：${stockData.latestDate}`
 
-  // Start SSE stream
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive',
-  })
-
+  // Second meta — fills in the full stockData + score. Frontend onMeta merges
+  // this into the existing message instead of pushing a new one.
   sseWrite(res, 'meta', {
     type: 'holding',
     stockData: { ...stockData, ...(hasCost ? { profitPct: Number(profitPct), costPrice } : {}), score },
@@ -277,12 +250,7 @@ async function handleNews(req, res) {
 
   const userContent = `请解读以下新闻/公告/政策对A股短线的影响：\n\n${content}`
 
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive',
-  })
-
+  sseOpen(res)
   sseWrite(res, 'meta', { type: 'news' })
 
   try {
@@ -305,12 +273,7 @@ async function handleQA(req, res) {
     return res.end(JSON.stringify({ error: '请提供您的问题' }))
   }
 
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive',
-  })
-
+  sseOpen(res)
   sseWrite(res, 'meta', { type: 'qa' })
 
   try {
@@ -326,6 +289,10 @@ async function handleQA(req, res) {
 }
 
 async function handleMarket(req, res) {
+  // Open SSE early so the bubble flips to streaming state before the data fetch.
+  sseOpen(res)
+  sseWrite(res, 'meta', { type: 'market' })
+
   // Fetch indices and sector overview in parallel
   const [indices, sectors] = await Promise.all([
     fetchMarketIndices(),
@@ -333,8 +300,9 @@ async function handleMarket(req, res) {
   ])
 
   if (indices.length === 0 && sectors.length === 0) {
-    res.writeHead(200, { 'Content-Type': 'application/json' })
-    return res.end(JSON.stringify({ type: 'market', error: true, text: '获取大盘数据失败，请稍后重试' }))
+    sseWrite(res, 'meta', { type: 'market', error: true, text: '获取大盘数据失败，请稍后重试' })
+    sseWrite(res, 'done', {})
+    return res.end()
   }
 
   // Build data string for AI
@@ -349,13 +317,7 @@ async function handleMarket(req, res) {
 
   const userContent = `今日三大指数实时数据：\n${indexStr}\n\n各板块表现：\n${sectorStr}`
 
-  // Start SSE stream
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive',
-  })
-
+  // Second meta — fills in indices + sectors data.
   sseWrite(res, 'meta', { type: 'market', indices, sectors })
 
   try {

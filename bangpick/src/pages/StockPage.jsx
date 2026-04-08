@@ -18,15 +18,39 @@ const FEATURE_COLORS = {
 }
 
 /* ===== Landing View ===== */
+// Hot sectors cache — survives remounts (tab switch) so users don't see the
+// "快捷入口 → 今日热门板块" flicker every time they come back to this page.
+const HOT_SECTORS_CACHE_KEY = 'bangpick_hot_sectors_v1'
+let hotSectorsMemCache = null
+function readHotSectorsCache() {
+  if (hotSectorsMemCache) return hotSectorsMemCache
+  try {
+    const raw = sessionStorage.getItem(HOT_SECTORS_CACHE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) { hotSectorsMemCache = parsed; return parsed }
+    }
+  } catch { /* ignore */ }
+  return []
+}
+
 function StockLandingView({ onFill, onStartHolding, onStartRecommend, onStartDoubleGolden, holdings, setHoldings }) {
-  const [hotSectors, setHotSectors] = useState([])
+  const [hotSectors, setHotSectors] = useState(() => readHotSectorsCache())
 
   useEffect(() => {
+    // Only refetch if cache is empty — keeps layout stable across tab switches
+    if (hotSectors.length > 0) return
     fetch('/api/stock-hot-sectors', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
       .then(r => r.json())
-      .then(data => { if (Array.isArray(data)) setHotSectors(data) })
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          hotSectorsMemCache = data
+          try { sessionStorage.setItem(HOT_SECTORS_CACHE_KEY, JSON.stringify(data)) } catch { /* quota */ }
+          setHotSectors(data)
+        }
+      })
       .catch(() => {})
-  }, [])
+  }, [hotSectors.length])
 
   // Build dynamic examples from hot sectors
   const dynamicExamples = hotSectors.length > 0
@@ -235,11 +259,16 @@ export default function StockPage() {
   const [loading, setLoading] = useState(false)
   const [holdings, setHoldings] = useState(() => getHoldings())
   const [appHeight, setAppHeight] = useState('100%')
+  const [keyboardOpen, setKeyboardOpen] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
   const abortRef = useRef(null)
   const initialQueryHandled = useRef(false)
+  // Ref to latest handleSend so the URL-param effect below doesn't depend on
+  // the callback identity. Declared up here (before any effect) so it is in
+  // scope and initialised by the time effects run on first render.
+  const handleSendRef = useRef(null)
 
   // Persist chat (debounced to avoid thrashing during streaming)
   const saveTimer = useRef(null)
@@ -252,12 +281,16 @@ export default function StockPage() {
     }, 500)
   }, [messages])
 
-  // Visual viewport for mobile keyboard
+  // Visual viewport for mobile keyboard. When the iOS keyboard opens,
+  // visualViewport.height shrinks but window.innerHeight stays the same. Use
+  // the gap to detect keyboard-open state so we can collapse the BottomNav
+  // slot (otherwise pb-20 leaves an 80px black gap above the keyboard).
   useEffect(() => {
     const vv = window.visualViewport
     if (!vv) return
     function updateHeight() {
       setAppHeight(`${vv.height}px`)
+      setKeyboardOpen(window.innerHeight - vv.height > 100)
       window.scrollTo(0, 0)
       document.documentElement.scrollTop = 0
     }
@@ -271,10 +304,13 @@ export default function StockPage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
-  // Cleanup abort on unmount
-  useEffect(() => {
-    return () => abortRef.current?.()
-  }, [])
+  // NOTE: Do NOT abort the in-flight stream on effect cleanup. React 19
+  // StrictMode runs `doubleInvokeEffectsOnFiber` which fires passive-effect
+  // cleanups during normal commits (not just on unmount) to verify
+  // idempotency. A `return () => abortRef.current?.()` here would kill the
+  // stock-ai request 0ms after handleSend dispatches it, the moment the
+  // conditional render swaps StockLandingView → StockChatView. The handleSend
+  // function already aborts any previous request before starting a new one.
 
   // Auto-send when navigated with ?q=... (e.g. from watchlist)
   useEffect(() => {
@@ -287,12 +323,20 @@ export default function StockPage() {
     handleSendRef.current?.(q)
   }, [searchParams, setSearchParams])
 
-  // Ref to handleSend so the effect above doesn't depend on the callback identity
-  const handleSendRef = useRef(null)
-
   const handleSend = useCallback(async (text, options = {}) => {
     const trimmed = typeof text === 'string' ? text.trim() : ''
-    if (!trimmed || loading) return
+    console.log('[handleSend] called', { text: trimmed, loading, options })
+    if (!trimmed || loading) {
+      console.log('[handleSend] EARLY RETURN', { trimmed: !!trimmed, loading })
+      return
+    }
+
+    // Abort any still-streaming previous request. `loading` flips false on the
+    // first meta event, so the user can fire a new question while the old
+    // stream is still flowing — without this, two SSE connections compete on
+    // the same dev middleware and the second one stalls.
+    abortRef.current?.()
+    abortRef.current = null
 
     const userMsg = { role: 'user', content: trimmed }
     setMessages(prev => [...prev, userMsg])
@@ -304,15 +348,28 @@ export default function StockPage() {
       const assistantMsgIdx = { current: -1 }
       const abort = analyzeStockStream(overridePayload, {
         onMeta(meta) {
-          setMessages(prev => {
-            assistantMsgIdx.current = prev.length
-            return [...prev, {
-              role: 'assistant',
-              apiResponse: { ...meta, text: '' },
-              content: '',
-              _streaming: true,
-            }]
-          })
+          // Backend sends meta TWICE: early skeleton then full payload. Branch
+          // OUTSIDE the updater — React StrictMode runs updaters twice, so any
+          // ref mutation inside leads the second pass down the wrong branch.
+          if (assistantMsgIdx.current < 0) {
+            setMessages(prev => {
+              assistantMsgIdx.current = prev.length
+              return [...prev, {
+                role: 'assistant',
+                apiResponse: { ...meta, text: '' },
+                content: '',
+                _streaming: true,
+              }]
+            })
+          } else {
+            setMessages(prev => {
+              const updated = [...prev]
+              const msg = { ...updated[assistantMsgIdx.current] }
+              msg.apiResponse = { ...msg.apiResponse, ...meta, text: msg.apiResponse?.text || '' }
+              updated[assistantMsgIdx.current] = msg
+              return updated
+            })
+          }
           setLoading(false)
         },
         onDelta(chunk) {
@@ -356,7 +413,15 @@ export default function StockPage() {
       return
     }
 
-    let intent = detectIntent(trimmed)
+    let intent
+    try {
+      intent = detectIntent(trimmed)
+      console.log('[handleSend] intent:', intent)
+    } catch (e) {
+      console.error('[handleSend] detectIntent threw:', e)
+      setLoading(false)
+      return
+    }
 
     // ── 前置拦截：不合理需求 / 超范围 / 无关话题 ──
     if (intent.type === 'reject_unrealistic') {
@@ -446,21 +511,37 @@ export default function StockPage() {
       payload = { type: 'recommend', sector: intent.sector || null, query: intent.query || trimmed }
     }
 
+    console.log('[handleSend] payload built, calling analyzeStockStream', payload)
+
     // Create a placeholder assistant message that will be updated via streaming
     const assistantMsgIdx = { current: -1 }
 
     const abort = analyzeStockStream(payload, {
       onMeta(meta) {
-        // First event: create the assistant message with metadata + streaming flag
-        setMessages(prev => {
-          assistantMsgIdx.current = prev.length
-          return [...prev, {
-            role: 'assistant',
-            apiResponse: { ...meta, text: '' },
-            content: '',
-            _streaming: true,
-          }]
-        })
+        console.log('[handleSend] onMeta', meta)
+        // Backend sends meta TWICE: early skeleton (so the loading bubble can
+        // flip to streaming) then full stockData. Branch OUTSIDE the updater
+        // — React StrictMode runs updaters twice, and a ref mutation inside
+        // would lead the second pass into the wrong branch on first meta.
+        if (assistantMsgIdx.current < 0) {
+          setMessages(prev => {
+            assistantMsgIdx.current = prev.length
+            return [...prev, {
+              role: 'assistant',
+              apiResponse: { ...meta, text: '' },
+              content: '',
+              _streaming: true,
+            }]
+          })
+        } else {
+          setMessages(prev => {
+            const updated = [...prev]
+            const msg = { ...updated[assistantMsgIdx.current] }
+            msg.apiResponse = { ...msg.apiResponse, ...meta, text: msg.apiResponse?.text || '' }
+            updated[assistantMsgIdx.current] = msg
+            return updated
+          })
+        }
         setLoading(false)
       },
       onDelta(chunk) {
@@ -507,8 +588,10 @@ export default function StockPage() {
     abortRef.current = abort
   }, [loading])
 
-  // Keep ref in sync so the URL-param effect can call latest handleSend
-  useEffect(() => { handleSendRef.current = handleSend }, [handleSend])
+  // Keep ref in sync so the URL-param effect can call latest handleSend.
+  // Sync assignment during render (not in useEffect) so the ref is populated
+  // before any effect runs on first render.
+  handleSendRef.current = handleSend
 
   function handleRetry(errorMsg) {
     setMessages(prev => prev.filter(m => m !== errorMsg))
@@ -552,7 +635,7 @@ export default function StockPage() {
   const inChat = messages.length > 0
 
   return (
-    <div className="flex flex-col bg-gradient-to-br from-[#0a0e14] via-[#0f141a] to-[#0a0e14] pb-20" style={{ height: appHeight }}>
+    <div className={`flex flex-col bg-gradient-to-br from-[#0a0e14] via-[#0f141a] to-[#0a0e14] ${keyboardOpen ? '' : 'pb-20'}`} style={{ height: appHeight }}>
       {/* Header */}
       <header className="flex-shrink-0 bg-[#0a0e14]/80 backdrop-blur-xl z-50 shadow-[0_4px_30px_rgba(0,0,0,0.1)]">
         <div className="flex justify-between items-center px-6 h-16 w-full">
@@ -594,7 +677,7 @@ export default function StockPage() {
         </>
       )}
 
-      <BottomNav />
+      {!keyboardOpen && <BottomNav />}
     </div>
   )
 }

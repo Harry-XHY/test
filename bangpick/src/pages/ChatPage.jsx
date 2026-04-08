@@ -293,18 +293,12 @@ export default function ChatPage() {
             <h1 className="text-xl font-black tracking-tighter text-[var(--primary)]" style={{ filter: 'drop-shadow(0 0 15px rgba(182,160,255,0.3))' }}>帮我选</h1>
           </div>
           <div className="flex items-center gap-3">
-            <button
-              onClick={async () => {
-                const loc = await requestLocation()
-                if (loc?.city) {
-                  setLocationText(formatLocation(loc))
-                }
-              }}
-              className="flex items-center gap-1 text-slate-400 text-sm hover:text-[var(--primary)] transition-colors active:scale-95"
-            >
-              <span className="material-symbols-outlined text-sm">location_on</span>
-              <span className="font-bold">{cityName || '获取定位...'}</span>
-            </button>
+            {cityName && (
+              <div className="flex items-center gap-1 text-slate-400 text-sm">
+                <span className="material-symbols-outlined text-sm">location_on</span>
+                <span className="font-bold">{cityName}</span>
+              </div>
+            )}
             {inChat && (
               <button
                 onClick={() => { setMessages([]); try { sessionStorage.removeItem(SESSION_CHAT_KEY) } catch { /* ignore */ } }}

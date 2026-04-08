@@ -127,8 +127,25 @@ export async function fetchStockData({ code, market, name, marketCap }) {
     const volumes = candles.map(c => c.volume)
     const n       = closes.length
 
+    const ma5  = avg(closes.slice(n - 5))
     const ma10 = avg(closes.slice(n - 10))
     const ma20 = avg(closes.slice(n - 20))
+
+    // MA5/MA10 golden cross detection over last 3 days
+    // A cross happens on day i if ma5[i-1] <= ma10[i-1] && ma5[i] > ma10[i]
+    let maGoldenCrossRecent = false
+    for (let d = 0; d < 3; d++) {
+      const end = n - d
+      if (end < 11) break
+      const ma5Now   = avg(closes.slice(end - 5, end))
+      const ma10Now  = avg(closes.slice(end - 10, end))
+      const ma5Prev  = avg(closes.slice(end - 6, end - 1))
+      const ma10Prev = avg(closes.slice(end - 11, end - 1))
+      if (ma5Prev <= ma10Prev && ma5Now > ma10Now) {
+        maGoldenCrossRecent = true
+        break
+      }
+    }
 
     const ema12arr = calcEMA(closes, 12, 2 / 13, 11 / 13)
     const ema26arr = calcEMA(closes, 26, 2 / 27, 25 / 27)
@@ -162,6 +179,19 @@ export async function fetchStockData({ code, market, name, marketCap }) {
       macdSignal = 'below_zero'
     }
 
+    // MACD golden cross over last 3 days
+    let macdGoldenCrossRecent = false
+    const dLen = difArr.length
+    for (let d = 0; d < 3; d++) {
+      const i = dLen - 1 - d
+      if (i < 1) break
+      if (difArr[i - 1] < deaArr[i - 1] && difArr[i] >= deaArr[i]) {
+        macdGoldenCrossRecent = true
+        break
+      }
+    }
+    const doubleGoldenCross = macdGoldenCrossRecent && maGoldenCrossRecent
+
     const recentVols = volumes.slice(n - 3)
     const baseVols   = volumes.slice(n - 13, n - 3)
     const baseAvg    = avg(baseVols)
@@ -178,8 +208,12 @@ export async function fetchStockData({ code, market, name, marketCap }) {
       latestDate:  latest.date,
       close,
       change:      changePercent,
+      ma5:         round(ma5, 4),
       ma10:        round(ma10, 4),
       ma20:        round(ma20, 4),
+      maGoldenCrossRecent,
+      macdGoldenCrossRecent,
+      doubleGoldenCross,
       dif:         round(dif, 4),
       dea:         round(dea, 4),
       macd:        round(macd, 4),

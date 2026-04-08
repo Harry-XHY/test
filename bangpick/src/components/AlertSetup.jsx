@@ -43,85 +43,175 @@ export default function AlertSetup({ stock, onClose, onCreated }) {
     }
   }
 
+  // Group types so the picker reads as 价格 / 涨跌幅 / 技术 — easier to scan
+  // than a single 7-row dropdown.
+  const groups = [
+    { label: '价格', items: ALERT_TYPES.filter(t => t.value.startsWith('price_')) },
+    { label: '涨跌幅', items: ALERT_TYPES.filter(t => t.value.startsWith('change_pct_')) },
+    { label: '技术 / 量能', items: ALERT_TYPES.filter(t => t.value.startsWith('macd_') || t.value.startsWith('vol_')) },
+  ]
+
+  const placeholder =
+    selected?.value === 'change_pct_above' || selected?.value === 'change_pct_below'
+      ? '例如 5'
+      : selected?.value === 'vol_ratio_above'
+        ? '例如 2'
+        : '例如 1700'
+
+  const helper =
+    selected?.value === 'change_pct_below' ? '填正数，例如 5 表示当日跌幅达到 5%'
+    : selected?.value === 'change_pct_above' ? '当日涨幅达到此百分比时提醒'
+    : (selected?.value === 'price_above' || selected?.value === 'price_below') ? '最新价触达此价位时提醒'
+    : selected?.value === 'vol_ratio_above' ? '量比达到此倍数时提醒（资金活跃度）'
+    : ''
+
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-md animate-[fadeIn_.18s_ease-out]"
       onClick={onClose}
     >
+      <style>{`
+        @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes slideUp { from { transform: translateY(16px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
+      `}</style>
       <div
-        className="w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl p-5 pb-8"
-        style={{ background: '#15191f', border: '1px solid rgba(255,255,255,0.08)' }}
+        className="w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl overflow-hidden animate-[slideUp_.22s_ease-out]"
+        style={{
+          background: 'linear-gradient(180deg, #1a1f29 0%, #12161d 100%)',
+          border: '1px solid rgba(167,139,250,0.18)',
+          boxShadow: '0 -20px 60px rgba(0,0,0,0.6), 0 0 80px rgba(167,139,250,0.08)',
+        }}
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-bold text-white">设置提醒</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-white text-xl leading-none">×</button>
+        {/* drag handle for mobile */}
+        <div className="sm:hidden flex justify-center pt-2.5 pb-1">
+          <div className="w-10 h-1 rounded-full bg-white/15" />
         </div>
 
-        <div className="mb-4 px-3 py-2 rounded-xl" style={{ background: 'rgba(255,255,255,0.04)' }}>
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-white">{stock.name}</span>
-            <span className="text-[11px] font-mono text-slate-400">{stock.code}</span>
-          </div>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs text-slate-400 mb-1.5">提醒类型</label>
-            <select
-              value={type}
-              onChange={e => { setType(e.target.value); setError(null) }}
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:border-purple-500 outline-none"
-            >
-              {ALERT_TYPES.map(t => (
-                <option key={t.value} value={t.value}>{t.label}</option>
-              ))}
-            </select>
-          </div>
-
-          {needsThreshold && (
-            <div>
-              <label className="block text-xs text-slate-400 mb-1.5">
-                阈值 {selected?.unit ? `(${selected.unit})` : ''}
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                value={threshold}
-                onChange={e => { setThreshold(e.target.value); setError(null) }}
-                placeholder={
-                  selected?.value === 'change_pct_above' || selected?.value === 'change_pct_below'
-                    ? '例如 5'
-                    : selected?.value === 'vol_ratio_above'
-                      ? '例如 2'
-                      : '例如 1700'
-                }
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:border-purple-500 outline-none font-mono"
-                autoFocus
-              />
-              <p className="text-[11px] text-slate-500 mt-1">
-                {selected?.value === 'change_pct_below' && '填正数即可，例如填 5 表示当日跌幅达到 5%'}
-                {selected?.value === 'change_pct_above' && '当日涨幅达到此百分比时提醒'}
-                {(selected?.value === 'price_above' || selected?.value === 'price_below') && '收盘价/最新价触达此价位时提醒'}
-                {selected?.value === 'vol_ratio_above' && '量比达到此倍数时提醒（资金活跃度）'}
-              </p>
+        <div className="px-5 pt-3 pb-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🔔</span>
+              <h3 className="text-base font-bold text-white tracking-wide">设置提醒</h3>
             </div>
-          )}
+            <button
+              onClick={onClose}
+              className="w-8 h-8 rounded-full grid place-items-center text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+              aria-label="关闭"
+            >
+              <span className="text-lg leading-none">×</span>
+            </button>
+          </div>
 
-          {error && <p className="text-xs text-red-400">{error}</p>}
-
-          <p className="text-[11px] text-slate-500">
-            提醒会在 A 股交易时段每 5 分钟检查一次，触发后自动停用并出现在通知栏。
-          </p>
-
-          <button
-            type="submit"
-            disabled={busy}
-            className="w-full text-sm bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white rounded-xl py-2.5 font-medium"
+          {/* Stock chip */}
+          <div
+            className="mb-5 px-4 py-3 rounded-2xl flex items-center justify-between"
+            style={{
+              background: 'rgba(167,139,250,0.08)',
+              border: '1px solid rgba(167,139,250,0.15)',
+            }}
           >
-            {busy ? '添加中…' : '添加提醒'}
-          </button>
-        </form>
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl grid place-items-center text-xs font-bold text-purple-200" style={{ background: 'rgba(167,139,250,0.18)' }}>
+                {stock.name?.[0] || '股'}
+              </div>
+              <div className="flex flex-col">
+                <span className="text-sm font-semibold text-white leading-tight">{stock.name}</span>
+                <span className="text-[11px] font-mono text-slate-400 leading-tight">{stock.code}</span>
+              </div>
+            </div>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Type picker — grouped pill grid */}
+            <div>
+              <label className="block text-[11px] uppercase tracking-[0.12em] font-bold text-slate-500 mb-2.5">提醒类型</label>
+              <div className="space-y-3">
+                {groups.map(g => (
+                  <div key={g.label}>
+                    <div className="text-[10px] text-slate-500 mb-1.5 px-1">{g.label}</div>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {g.items.map(t => {
+                        const active = type === t.value
+                        return (
+                          <button
+                            key={t.value}
+                            type="button"
+                            onClick={() => { setType(t.value); setError(null) }}
+                            className={`text-xs font-medium py-2 rounded-xl transition-all duration-150 active:scale-[0.97] ${
+                              active
+                                ? 'text-white shadow-[0_4px_14px_rgba(167,139,250,0.35)]'
+                                : 'text-slate-300 hover:text-white'
+                            }`}
+                            style={{
+                              background: active
+                                ? 'linear-gradient(135deg, #8b5cf6, #a855f7)'
+                                : 'rgba(255,255,255,0.04)',
+                              border: active
+                                ? '1px solid rgba(167,139,250,0.5)'
+                                : '1px solid rgba(255,255,255,0.06)',
+                            }}
+                          >
+                            {t.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Threshold input */}
+            {needsThreshold && (
+              <div>
+                <label className="block text-[11px] uppercase tracking-[0.12em] font-bold text-slate-500 mb-2.5">
+                  阈值 {selected?.unit ? <span className="text-slate-400 normal-case">（{selected.unit}）</span> : ''}
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={threshold}
+                    onChange={e => { setThreshold(e.target.value); setError(null) }}
+                    placeholder={placeholder}
+                    className="w-full bg-black/30 border border-white/10 rounded-2xl px-4 py-3 text-white text-base focus:border-purple-500/60 focus:bg-black/50 outline-none font-mono tabular-nums transition-colors"
+                    autoFocus
+                  />
+                  {selected?.unit && (
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-slate-500 font-mono pointer-events-none">
+                      {selected.unit}
+                    </span>
+                  )}
+                </div>
+                {helper && <p className="text-[11px] text-slate-500 mt-2 px-1">{helper}</p>}
+              </div>
+            )}
+
+            {error && (
+              <div className="text-xs text-red-400 px-3 py-2 rounded-xl" style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)' }}>
+                {error}
+              </div>
+            )}
+
+            <p className="text-[11px] text-slate-500 leading-relaxed flex items-start gap-1.5">
+              <span className="mt-0.5">ⓘ</span>
+              <span>A 股交易时段每 5 分钟检查一次，触发后自动停用并出现在通知栏。</span>
+            </p>
+
+            <button
+              type="submit"
+              disabled={busy}
+              className="w-full text-sm font-bold text-white rounded-2xl py-3.5 transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{
+                background: 'linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%)',
+                boxShadow: '0 8px 24px rgba(139,92,246,0.35)',
+              }}
+            >
+              {busy ? '添加中…' : '✓ 添加提醒'}
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   )

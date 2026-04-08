@@ -4,6 +4,7 @@ import BottomNav from '../components/BottomNav'
 import StockSearch from '../components/StockSearch'
 import AlertSetup from '../components/AlertSetup'
 import { getWatchlist, addToWatchlist, removeFromWatchlist } from '../lib/watchlist'
+import { evaluateAlerts, markTriggered } from '../lib/alerts'
 
 // 自选股 — overview page with live quotes refreshed during trading hours.
 
@@ -38,8 +39,40 @@ export default function WatchlistPage() {
   const [showAdd, setShowAdd] = useState(false)
   const [lastRefresh, setLastRefresh] = useState(null)
   const [alertTarget, setAlertTarget] = useState(null) // stock obj when AlertSetup is open
+  const [toasts, setToasts] = useState([]) // [{ id, message }]
   const navigate = useNavigate()
   const refreshTimer = useRef(null)
+
+  // Request browser notification permission once on mount.
+  // Only fires the prompt if not already decided (default state).
+  useEffect(() => {
+    if (typeof Notification === 'undefined') return
+    if (Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {})
+    }
+  }, [])
+
+  // Pop a hit as both an in-page toast (always works) and a system
+  // notification (works in background tabs / minimized window if granted).
+  const fireHit = useCallback((hit) => {
+    const id = `${hit.alert.id}_${Date.now()}`
+    setToasts(prev => [...prev, { id, message: hit.message }])
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id))
+    }, 8000)
+
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      try {
+        new Notification('帮我选 · 自选股提醒', {
+          body: hit.message,
+          tag: hit.alert.id, // dedupe across tabs
+          icon: '/favicon.svg',
+        })
+      } catch { /* some browsers throw on file:// or insecure contexts */ }
+    }
+
+    markTriggered(hit.alert.id, hit.message)
+  }, [])
 
   const fetchQuotes = useCallback(async (list) => {
     if (!list || list.length === 0) {
@@ -58,6 +91,10 @@ export default function WatchlistPage() {
       ;(data.results || []).forEach(res => { if (res?.code) next[res.code] = res })
       setQuotes(next)
       setLastRefresh(new Date())
+
+      // Evaluate alerts against fresh quotes; fire any new hits.
+      const hits = evaluateAlerts(next)
+      hits.forEach(fireHit)
     } catch {
       // Keep previous quotes on failure
     } finally {
@@ -241,6 +278,32 @@ export default function WatchlistPage() {
           stock={alertTarget}
           onClose={() => setAlertTarget(null)}
         />
+      )}
+
+      {/* In-page toast stack for alert hits — appears top-right, auto-dismiss in 8s */}
+      {toasts.length > 0 && (
+        <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-[calc(100vw-2rem)] w-80 pointer-events-none">
+          {toasts.map(t => (
+            <div
+              key={t.id}
+              className="pointer-events-auto rounded-xl px-4 py-3 shadow-2xl backdrop-blur-xl flex items-start gap-2 animate-[slideInRight_0.3s_ease-out]"
+              style={{
+                background: 'linear-gradient(135deg, rgba(91,140,255,0.95), rgba(122,124,255,0.95))',
+                border: '1px solid rgba(255,255,255,0.2)',
+                color: '#fff',
+              }}
+            >
+              <span className="material-symbols-outlined text-[20px] flex-shrink-0 mt-0.5">notifications_active</span>
+              <div className="flex-1 text-sm leading-snug">{t.message}</div>
+              <button
+                onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))}
+                className="text-white/70 hover:text-white flex-shrink-0"
+              >
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   )

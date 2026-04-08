@@ -1,4 +1,4 @@
-import { Redis } from '@upstash/redis'
+import { getRedis } from './_redis.js'
 import pLimit from 'p-limit'
 import { fetchStockData } from './_stockData.js'
 
@@ -15,13 +15,6 @@ const ALERTS_TTL_SEC = 60 * 60 * 24 * 90        // match sync.js
 const MAX_NOTIFS_PER_USER = 50
 const SCAN_PAGE = 100
 const QUOTE_CONCURRENCY = 5
-
-function getRedis() {
-  if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
-    return null
-  }
-  return Redis.fromEnv()
-}
 
 function isTradingHoursUTC() {
   const now = new Date()

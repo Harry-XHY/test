@@ -60,13 +60,11 @@ async function ipGeolocate() {
 }
 
 async function browserGeolocate() {
-  // Check if geolocation is available and likely to work
   if (!navigator.geolocation) throw new Error('no geolocation')
 
-  // On HTTP (non-localhost), most browsers silently deny — skip to save time
-  const isSecure = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1'
-  if (!isSecure) throw new Error('insecure context')
-
+  // Don't pre-flight gate on isSecure — some mobile browsers (iOS Safari)
+  // still show the permission prompt on HTTP LAN. Let the browser decide;
+  // if it denies, we catch and fall through to IP geolocate.
   const pos = await new Promise((resolve, reject) => {
     navigator.geolocation.getCurrentPosition(resolve, reject, {
       enableHighAccuracy: true,

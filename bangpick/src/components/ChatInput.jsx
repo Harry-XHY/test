@@ -10,7 +10,7 @@ const ChatInput = forwardRef(function ChatInput({ onSend, disabled }, ref) {
   const recognitionRef = useRef(null)
 
   useImperativeHandle(ref, () => ({
-    fill(value) { setText(value) },
+    fill(value) { setText(typeof value === 'string' ? value : '') },
   }))
 
   useEffect(() => {

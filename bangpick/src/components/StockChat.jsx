@@ -412,7 +412,7 @@ export default function StockMessageBubble({ message, streaming }) {
   return (
     <div className="glass-card rounded-2xl p-4">
       {message.type === 'holding' && <HoldingMessage message={message} streaming={streaming} />}
-      {message.type === 'recommend' && <RecommendMessage message={message} streaming={streaming} />}
+      {(message.type === 'recommend' || message.type === 'recommend_double_golden') && <RecommendMessage message={message} streaming={streaming} />}
       {message.type === 'market' && <MarketMessage message={message} streaming={streaming} />}
       {message.type === 'news' && <NewsMessage message={message} streaming={streaming} />}
       {message.type === 'qa' && <QAMessage message={message} streaming={streaming} />}

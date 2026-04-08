@@ -1,17 +1,4 @@
 export async function createShareLink(decision) {
-  try {
-    const res = await fetch('/.netlify/functions/share-create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(decision),
-    })
-    if (res.ok) {
-      const { id } = await res.json()
-      return `${window.location.origin}/vote/${id}`
-    }
-  } catch {}
-
-  // Dev fallback: base64 in URL
   const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(decision))))
   return `${window.location.origin}/vote/b64_${encoded}`
 }
@@ -25,11 +12,6 @@ export async function getSharedDecision(id) {
       return null
     }
   }
-
-  try {
-    const res = await fetch(`/.netlify/functions/share-get?id=${id}`)
-    if (res.ok) return res.json()
-  } catch {}
   return null
 }
 

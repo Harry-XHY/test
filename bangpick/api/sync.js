@@ -1,4 +1,4 @@
-import { Redis } from '@upstash/redis'
+import { getRedis } from './_redis.js'
 
 // Allowed data buckets per device. Anything else is rejected.
 const ALLOWED_KEYS = new Set([
@@ -13,13 +13,6 @@ const ALLOWED_KEYS = new Set([
 
 // Soft cap on payload size to keep KV usage in check (per bucket).
 const MAX_BYTES = 64 * 1024 // 64 KB
-
-function getRedis() {
-  if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
-    return null
-  }
-  return Redis.fromEnv()
-}
 
 function isValidDeviceId(id) {
   return typeof id === 'string' && /^[a-f0-9-]{36}$/i.test(id)

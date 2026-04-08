@@ -62,20 +62,33 @@ export function setSyncEnabled(enabled) {
 
 // ---- network helpers ----------------------------------------------------
 
+// If /api/sync isn't reachable (e.g. running `vite dev` without Vercel
+// Functions, or Upstash not yet provisioned), flip the sync kill-switch so
+// we stop spamming the console with 404s for the rest of the session.
+let syncDisabledThisSession = false
+function disableSyncForSession() {
+  syncDisabledThisSession = true
+  setSyncEnabled(false)
+}
+
 async function fetchBucket(bucket) {
+  if (syncDisabledThisSession) return null
   const deviceId = getDeviceId()
   if (!deviceId) return null
   try {
     const r = await fetch(`/api/sync?deviceId=${deviceId}&key=${bucket}`)
+    if (r.status === 404) { disableSyncForSession(); return null }
     if (!r.ok) return null
     const json = await r.json()
     return json.value ?? null
   } catch {
+    disableSyncForSession()
     return null
   }
 }
 
 async function pushBucket(bucket, value) {
+  if (syncDisabledThisSession) return false
   const deviceId = getDeviceId()
   if (!deviceId) return false
   try {
@@ -84,8 +97,10 @@ async function pushBucket(bucket, value) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ deviceId, key: bucket, value }),
     })
+    if (r.status === 404) { disableSyncForSession(); return false }
     return r.ok
   } catch {
+    disableSyncForSession()
     return false
   }
 }

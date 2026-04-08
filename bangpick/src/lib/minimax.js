@@ -1,6 +1,6 @@
 const isDev = import.meta.env.DEV
 const API_KEY = import.meta.env.VITE_MINIMAX_API_KEY || ''
-const CHAT_URL = isDev ? '/api/chat' : '/.netlify/functions/chat'
+const CHAT_URL = '/api/chat'
 
 function extractJSON(text) {
   try {

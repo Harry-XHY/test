@@ -96,3 +96,84 @@ export function describeAlert(a) {
   if (t.unit === null) return t.label
   return `${t.label} ${a.threshold}${t.unit}`
 }
+
+// Mark an alert as fired so we don't re-notify on every refresh.
+// Re-arms when user toggles the alert off/on.
+export function markTriggered(id, hitMessage) {
+  const list = getAlerts().map(a =>
+    a.id === id
+      ? { ...a, triggered: true, triggeredAt: new Date().toISOString(), hitMessage }
+      : a
+  )
+  save(list)
+}
+
+// Evaluate all enabled, untriggered alerts against fresh quotes.
+// `quotesByCode` is { code: { close, changePercent, volRatio, macdSignal } }
+// Returns an array of hits: [{ alert, message }]
+//
+// Supported types (client-side):
+//   price_above / price_below       → uses quote.close
+//   change_pct_above / below        → uses quote.changePercent
+//   vol_ratio_above                 → uses quote.volRatio
+//   macd_golden / macd_dead         → uses quote.macdSignal (server-computed)
+export function evaluateAlerts(quotesByCode, alerts = getAlerts()) {
+  const hits = []
+  for (const a of alerts) {
+    if (!a.enabled || a.triggered) continue
+    const q = quotesByCode[a.code]
+    if (!q || q.error || q.suspended) continue
+
+    let hit = false
+    let msg = ''
+    const name = a.name || a.code
+
+    switch (a.type) {
+      case 'price_above':
+        if (q.close != null && q.close >= a.threshold) {
+          hit = true
+          msg = `${name} 现价 ${q.close.toFixed(2)} 元，已突破 ${a.threshold} 元`
+        }
+        break
+      case 'price_below':
+        if (q.close != null && q.close <= a.threshold) {
+          hit = true
+          msg = `${name} 现价 ${q.close.toFixed(2)} 元，已跌破 ${a.threshold} 元`
+        }
+        break
+      case 'change_pct_above':
+        if (q.changePercent != null && q.changePercent >= a.threshold) {
+          hit = true
+          msg = `${name} 涨幅 ${q.changePercent.toFixed(2)}%，已超过 ${a.threshold}%`
+        }
+        break
+      case 'change_pct_below':
+        if (q.changePercent != null && q.changePercent <= -Math.abs(a.threshold)) {
+          hit = true
+          msg = `${name} 跌幅 ${Math.abs(q.changePercent).toFixed(2)}%，已超过 ${a.threshold}%`
+        }
+        break
+      case 'vol_ratio_above':
+        if (q.volRatio != null && q.volRatio >= a.threshold) {
+          hit = true
+          msg = `${name} 量比 ${q.volRatio.toFixed(2)}，已超过 ${a.threshold}`
+        }
+        break
+      case 'macd_golden':
+        if (q.macdSignal === 'golden_cross') {
+          hit = true
+          msg = `${name} MACD 金叉信号已出现`
+        }
+        break
+      case 'macd_dead':
+        if (q.macdSignal === 'death_cross') {
+          hit = true
+          msg = `${name} MACD 死叉信号已出现`
+        }
+        break
+    }
+
+    if (hit) hits.push({ alert: a, message: msg })
+  }
+  return hits
+}

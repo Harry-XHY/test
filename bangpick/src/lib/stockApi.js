@@ -19,12 +19,18 @@ export function analyzeStockStream(payload, { onMeta, onDelta, onDone, onError }
 
   ;(async () => {
     try {
-      const res = await fetch('/api/stock-analyze', {
+      console.log('[analyzeStockStream] fetching with payload', payload)
+      // Renamed from /api/stock-analyze — uBlock/AdBlock default rules
+      // (EasyPrivacy) match `*analyze*` `*analytics*` and silently abort the
+      // request before it leaves the browser. Network panel shows red ❌ with
+      // "Provisional headers shown" and the server never sees the call.
+      const res = await fetch('/api/stock-ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
         signal: controller.signal,
       })
+      console.log('[analyzeStockStream] response received', res.status, res.headers.get('content-type'))
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
@@ -49,6 +55,12 @@ export function analyzeStockStream(payload, { onMeta, onDelta, onDone, onError }
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let buf = ''
+      // currentEvent MUST persist across chunks. The server flushes a 2KB
+      // padding comment before any real events, so the `event:` line and its
+      // matching `data:` line frequently land in different reader chunks. If
+      // we reset per chunk, the data line arrives with no event context and
+      // gets silently dropped.
+      let currentEvent = ''
 
       while (true) {
         const { done, value } = await reader.read()
@@ -58,7 +70,6 @@ export function analyzeStockStream(payload, { onMeta, onDelta, onDone, onError }
         const lines = buf.split('\n')
         buf = lines.pop() // keep incomplete line
 
-        let currentEvent = ''
         for (const line of lines) {
           if (line.startsWith('event: ')) {
             currentEvent = line.slice(7).trim()

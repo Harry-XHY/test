@@ -1,4 +1,4 @@
-import { Redis } from '@upstash/redis'
+import { getRedis } from './_redis.js'
 import pLimit from 'p-limit'
 import { fetchStockData } from './_stockData.js'
 
@@ -14,13 +14,6 @@ const HOLDINGS_TTL_SEC = 60 * 60 * 24 * 90
 const MAX_SNAPSHOTS = 365
 const SCAN_PAGE = 100
 const QUOTE_CONCURRENCY = 5
-
-function getRedis() {
-  if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
-    return null
-  }
-  return Redis.fromEnv()
-}
 
 function todayKey() {
   // Use Beijing date (UTC+8) — snapshots align with the local trading day.

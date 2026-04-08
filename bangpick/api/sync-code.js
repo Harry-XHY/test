@@ -1,4 +1,4 @@
-import { Redis } from '@upstash/redis'
+import { getRedis } from './_redis.js'
 
 // Generate or redeem a 6-digit cross-device sync code.
 //   POST { action: 'generate', deviceId }
@@ -12,13 +12,6 @@ import { Redis } from '@upstash/redis'
 
 const BUCKETS = ['history', 'holdings', 'watchlist', 'stockChat', 'snapshots', 'alerts']
 const CODE_TTL_SEC = 600
-
-function getRedis() {
-  if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
-    return null
-  }
-  return Redis.fromEnv()
-}
 
 function isValidDeviceId(id) {
   return typeof id === 'string' && /^[a-f0-9-]{36}$/i.test(id)
