@@ -7,7 +7,7 @@
     "api/stock-ai.js": { "maxDuration": 60 },
     "api/stock-hot-sectors.js": { "maxDuration": 30 },
     "api/stock-search.js": { "maxDuration": 15 },
-    "api/chat.js": { "maxDuration": 30 },
+    "api/chat.js": { "maxDuration": 60 },
     "api/cron-check-alerts.js": { "maxDuration": 60 },
     "api/cron-snapshot.js": { "maxDuration": 60 }
   },

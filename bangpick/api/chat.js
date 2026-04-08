@@ -25,6 +25,7 @@ export default async function handler(req, res) {
       content: [{ type: 'text', text }],
     }))
   } catch (err) {
+    console.error('[chat] upstream failed:', err)
     res.writeHead(500, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ error: err?.message || 'Upstream request failed' }))
   }
