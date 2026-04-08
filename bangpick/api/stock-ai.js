@@ -165,10 +165,18 @@ async function handleHolding(req, res) {
   sseWrite(res, 'meta', { type: 'holding', stockData: { code, name: name || code, market } })
 
   // Fetch stock data and hot sectors in parallel
-  const [stockData, hotSectors] = await Promise.all([
-    fetchStockData({ code, market, name: name || code }),
-    fetchSectorOverview(),
-  ])
+  let stockData, hotSectors
+  try {
+    ;[stockData, hotSectors] = await Promise.all([
+      fetchStockData({ code, market, name: name || code }),
+      fetchSectorOverview(),
+    ])
+  } catch (err) {
+    console.error('[handleHolding] fetch failed:', err)
+    sseWrite(res, 'delta', { text: `获取行情数据失败：${err?.message || '请稍后重试'}` })
+    sseWrite(res, 'done', {})
+    return res.end()
+  }
 
   if (stockData.error || stockData.suspended) {
     sseWrite(res, 'meta', { type: 'holding', stockData: { ...stockData, code, name: name || code } })
@@ -345,19 +353,28 @@ export default async function handler(req, res) {
   }
 
   try {
-    if (type === 'recommend') return handleRecommend(req, res)
-    else if (type === 'holding') return handleHolding(req, res)
-    else if (type === 'market') return handleMarket(req, res)
-    else if (type === 'news') return handleNews(req, res)
-    else if (type === 'qa') return handleQA(req, res)
+    if (type === 'recommend') return await handleRecommend(req, res)
+    else if (type === 'holding') return await handleHolding(req, res)
+    else if (type === 'market') return await handleMarket(req, res)
+    else if (type === 'news') return await handleNews(req, res)
+    else if (type === 'qa') return await handleQA(req, res)
     else {
       res.writeHead(400, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ error: '不支持的分析类型' }))
     }
   } catch (err) {
+    console.error('[stock-ai] handler error:', err)
     if (!res.headersSent) {
       res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: '分析失败，请稍后重试' }))
+    } else {
+      // SSE already opened — emit an error event + done so the frontend
+      // can render a proper message instead of ERR_CONNECTION_CLOSED.
+      try {
+        sseWrite(res, 'delta', { text: `\n\n⚠️ 分析中断：${err?.message || '服务异常'}` })
+        sseWrite(res, 'done', {})
+      } catch {}
+      res.end()
     }
-    res.end(JSON.stringify({ error: '分析失败，请稍后重试' }))
   }
 }
