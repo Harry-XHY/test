@@ -16,7 +16,9 @@ function streamMiniMax(systemPrompt, userContent, onChunk) {
   return chatStream({
     system: systemPrompt,
     messages: [{ role: 'user', content: userContent }],
-    maxTokens: 2048,
+    // 4096 tokens — 双金叉推荐要覆盖 3 只股票各自的技术面+操作计划+风险提示，
+    // 2048 明显不够，线上观察到在第 3 只股尾部被硬切。
+    maxTokens: 4096,
     onChunk,
   })
 }
