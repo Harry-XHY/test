@@ -12,6 +12,7 @@
 //   minimax → MINIMAX_API_KEY (legacy fallback)
 
 import https from 'node:https'
+import { StringDecoder } from 'node:string_decoder'
 
 const PROVIDER = (process.env.AI_PROVIDER || 'zhipu').toLowerCase()
 
@@ -59,14 +60,24 @@ function httpsPostStream(url, headers, body, onLine, timeoutMs = 90000) {
           res.on('end', () => reject(new Error(`upstream ${res.statusCode}: ${errBody.slice(0, 200)}`)))
           return
         }
+        // StringDecoder handles multi-byte UTF-8 across TCP chunk boundaries.
+        // Plain `chunk.toString()` would corrupt Chinese chars / emoji split
+        // mid-byte, then JSON.parse would silently throw and the SSE delta
+        // text after that point would be lost — exactly the "output truncated
+        // mid-stream" symptom we were chasing.
+        const decoder = new StringDecoder('utf8')
         let buf = ''
         res.on('data', (chunk) => {
-          buf += chunk.toString()
+          buf += decoder.write(chunk)
           const lines = buf.split('\n')
           buf = lines.pop()
           for (const line of lines) onLine(line)
         })
-        res.on('end', () => { if (buf) onLine(buf); resolve() })
+        res.on('end', () => {
+          buf += decoder.end()
+          if (buf) onLine(buf)
+          resolve()
+        })
         res.on('error', reject)
       }
     )
