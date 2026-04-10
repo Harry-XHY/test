@@ -15,7 +15,7 @@ function loadEnv() {
     const m = line.match(/^([^#=]+)=(.*)$/)
     if (m) {
       const key = m[1].trim().replace(/^VITE_/, '')
-      if (!process.env[key]) process.env[key] = m[2].trim()
+      if (!process.env[key]) process.env[key] = m[2].trim().replace(/^["']|["']$/g, '')
     }
   }
 }

@@ -36,10 +36,20 @@ function readHotSectorsCache() {
 
 function StockLandingView({ onFill, onStartHolding, onStartRecommend, onStartDoubleGolden, holdings, setHoldings }) {
   const [hotSectors, setHotSectors] = useState(() => readHotSectorsCache())
+  const [marketIndices, setMarketIndices] = useState([])
 
   useEffect(() => {
-    // Only refetch if cache is empty — keeps layout stable across tab switches
-    if (hotSectors.length > 0) return
+    // Fetch market indices + auto-refresh every 30s
+    function fetchIndices() {
+      fetch('/api/stock-indices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+        .then(r => r.json())
+        .then(data => { if (Array.isArray(data)) setMarketIndices(data) })
+        .catch(() => {})
+    }
+    fetchIndices()
+    const timer = setInterval(fetchIndices, 30000)
+
+    // Always fetch latest data on mount; cached data shown as placeholder to avoid blank flash
     fetch('/api/stock-hot-sectors', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
       .then(r => r.json())
       .then(data => {
@@ -50,12 +60,14 @@ function StockLandingView({ onFill, onStartHolding, onStartRecommend, onStartDou
         }
       })
       .catch(() => {})
-  }, [hotSectors.length])
+
+    return () => clearInterval(timer)
+  }, [])
 
   // Build dynamic examples from hot sectors
   const dynamicExamples = hotSectors.length > 0
     ? [
-        ...hotSectors.slice(0, 4).map(s => ({
+        ...hotSectors.slice(0, 6).map(s => ({
           text: `${s.sector}板块有什么短线机会？`,
           icon: 'local_fire_department',
           tag: `${s.avgChange > 0 ? '+' : ''}${s.avgChange}%`,
@@ -112,6 +124,34 @@ function StockLandingView({ onFill, onStartHolding, onStartRecommend, onStartDou
           })}
         </div>
       </section>
+
+      {/* Market Indices */}
+      {marketIndices.length > 0 && (
+        <section className="mb-5">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="material-symbols-outlined text-sm" style={{ color: '#72757d', fontVariationSettings: "'FILL' 1" }}>monitoring</span>
+            <span className="text-xs font-semibold" style={{ color: '#72757d' }}>今日大盘</span>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {marketIndices.map(idx => {
+              const up = idx.change >= 0
+              return (
+                <button key={idx.name}
+                  onClick={() => onFill(`分析一下今天${idx.name}的走势`)}
+                  className="p-3 rounded-xl text-center active:scale-[0.97] transition-all"
+                  style={{ background: up ? 'rgba(239,68,68,0.05)' : 'rgba(34,197,94,0.05)', border: `1px solid ${up ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)'}` }}
+                >
+                  <div className="text-[11px] font-medium mb-1" style={{ color: '#a8abb3' }}>{idx.name}</div>
+                  <div className="text-sm font-bold font-mono" style={{ color: '#f1f3fc' }}>{idx.close.toFixed(2)}</div>
+                  <div className="text-xs font-bold font-mono mt-0.5" style={{ color: up ? '#ef4444' : '#22c55e' }}>
+                    {up ? '+' : ''}{idx.change.toFixed(2)}%
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </section>
+      )}
 
       {/* My Holdings — pill style */}
       {holdings.length > 0 && (

@@ -18,7 +18,7 @@ const PROVIDER = (process.env.AI_PROVIDER || 'zhipu').toLowerCase()
 
 // ── HTTPS POST helper (non-stream) ──────────────────────────────────────
 
-function httpsPostJSON(url, headers, body, timeoutMs = 90000) {
+function httpsPostJSON(url, headers, body, timeoutMs = 280000) {
   return new Promise((resolve, reject) => {
     const u = new URL(url)
     const req = https.request(

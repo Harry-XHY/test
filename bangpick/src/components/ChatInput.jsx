@@ -4,6 +4,9 @@ const SpeechRecognition = typeof window !== 'undefined'
   ? (window.SpeechRecognition || window.webkitSpeechRecognition)
   : null
 
+// WeChat in-app browser exposes webkitSpeechRecognition but start() silently fails
+const isWeChatBrowser = typeof navigator !== 'undefined' && /MicroMessenger/i.test(navigator.userAgent)
+
 const ChatInput = forwardRef(function ChatInput({ onSend, disabled }, ref) {
   const [text, setText] = useState('')
   const [listening, setListening] = useState(false)
@@ -31,8 +34,8 @@ const ChatInput = forwardRef(function ChatInput({ onSend, disabled }, ref) {
       setListening(false)
       return
     }
-    if (!SpeechRecognition) {
-      alert('您的浏览器不支持语音输入')
+    if (!SpeechRecognition || isWeChatBrowser) {
+      alert('微信浏览器暂不支持语音输入，请使用系统浏览器')
       return
     }
     const recognition = new SpeechRecognition()

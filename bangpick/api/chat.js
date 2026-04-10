@@ -3,7 +3,7 @@
 // expects an Anthropic-shaped response — we wrap the provider's output back
 // into { content: [{ type: 'text', text }] } so no client changes are needed.
 
-import { chatComplete } from './_aiProvider.js'
+import { chatStream } from './_aiProvider.js'
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -14,10 +14,15 @@ export default async function handler(req, res) {
 
   try {
     const { system, messages, max_tokens } = req.body || {}
-    const { text } = await chatComplete({
+    // Internal streaming: we consume the provider's SSE stream chunk by chunk
+    // so the TCP connection stays active (no 90s idle timeout), then return
+    // the concatenated text as a single JSON payload. Client code unchanged.
+    let text = ''
+    await chatStream({
       system: system || '',
       messages: Array.isArray(messages) ? messages : [],
       maxTokens: max_tokens || 1024,
+      onChunk: (delta) => { text += delta },
     })
 
     res.writeHead(200, { 'Content-Type': 'application/json' })

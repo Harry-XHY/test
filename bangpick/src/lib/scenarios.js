@@ -72,7 +72,7 @@ export function seededShuffle(arr, seed) {
 export function getRandomContent() {
   const seed = seedFromDate()
   return {
-    scenarios: seededShuffle(ALL_SCENARIOS, seed).slice(0, 4),
+    scenarios: seededShuffle(ALL_SCENARIOS, seed).slice(0, 2),
     examples: seededShuffle(ALL_EXAMPLES, seed + 1).slice(0, 4),
   }
 }

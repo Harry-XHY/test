@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { CrystalBallIcon } from '../components/QuizIcons'
 import ChatInput from '../components/ChatInput'
 import OptionCard from '../components/OptionCard'
 import RandomPicker from '../components/RandomPicker'
@@ -25,11 +27,11 @@ const SCENARIO_COLORS = [
 ]
 
 /* ===== Landing View ===== */
-function LandingView({ scenarios, examples, onFill, onOpenFortune }) {
+function LandingView({ scenarios, examples, onFill, onOpenFortune, onGoQuiz }) {
   return (
     <div>
       {/* Hero */}
-      <section className="mb-10">
+      <section className="mb-6">
         <h2 className="text-4xl md:text-6xl font-extrabold tracking-tight mb-4 leading-tight">
           纠结的时候，<br />
           <span className="text-gradient">交给我 ⚡</span>
@@ -39,35 +41,50 @@ function LandingView({ scenarios, examples, onFill, onOpenFortune }) {
         </p>
       </section>
 
-      {/* Daily Fortune */}
-      <FortuneCard onOpen={onOpenFortune} />
+      {/* Fortune + Quiz — side by side */}
+      <section className="mb-5">
+        <div className="grid grid-cols-2 gap-3">
+          <FortuneCard onOpen={onOpenFortune} />
+          <button onClick={onGoQuiz}
+            className="glass-card p-4 rounded-2xl text-left cursor-pointer active:scale-[0.98] transition-all duration-300 group relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-24 h-24 rounded-full blur-[50px] opacity-15 -translate-y-1/2 translate-x-1/3 group-hover:opacity-30 transition-opacity"
+              style={{ background: 'linear-gradient(135deg, #B6A0FF, #22C55E)' }} />
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-2.5"
+              style={{ background: 'color-mix(in srgb, #B6A0FF 15%, transparent)' }}>
+              <CrystalBallIcon size={24} />
+            </div>
+            <h5 className="text-[15px] font-bold text-[var(--text)] mb-0.5">人格测试</h5>
+            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">决策 & 投资人格</p>
+          </button>
+        </div>
+      </section>
 
       {/* Quick Scenarios — Grid */}
-      <section className="mb-12">
-        <div className="flex items-center justify-between mb-5">
+      <section className="mb-8">
+        <div className="flex items-center justify-between mb-3">
           <h4 className="text-sm font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]/60 px-1">Quick Scenarios</h4>
           <div className="h-[1px] flex-grow mx-4 bg-[var(--muted-2)]/30"></div>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-2.5">
           {scenarios.map((s, idx) => {
             const color = SCENARIO_COLORS[idx % SCENARIO_COLORS.length]
             return (
               <button
                 key={s.title}
                 onClick={() => onFill(s.fill)}
-                className="glass-card p-4 rounded-2xl text-left cursor-pointer active:scale-[0.96] transition-all duration-300 group relative overflow-hidden"
+                className="glass-card p-3.5 rounded-2xl text-left cursor-pointer active:scale-[0.96] transition-all duration-300 group relative overflow-hidden"
               >
                 <div className="absolute top-0 right-0 w-20 h-20 rounded-full blur-[40px] opacity-15 -translate-y-1/2 translate-x-1/3 transition-opacity group-hover:opacity-30" style={{ background: color }} />
                 <div
-                  className="w-10 h-10 rounded-xl flex items-center justify-center mb-3"
+                  className="w-9 h-9 rounded-lg flex items-center justify-center mb-2"
                   style={{ background: `color-mix(in srgb, ${color} 15%, transparent)` }}
                 >
-                  <span className="material-symbols-outlined text-xl" style={{ color }}>
+                  <span className="material-symbols-outlined text-lg" style={{ color }}>
                     {SCENARIO_ICONS[s.emoji] || 'help'}
                   </span>
                 </div>
-                <h5 className="text-[15px] font-bold text-[var(--text)] mb-1">{s.title}</h5>
-                <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{s.desc}</p>
+                <h5 className="text-sm font-bold text-[var(--text)] mb-0.5">{s.title}</h5>
+                <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">{s.desc}</p>
               </button>
             )
           })}
@@ -186,6 +203,7 @@ function persistSessionChat(messages) {
 
 /* ===== Main Page ===== */
 export default function ChatPage() {
+  const navigate = useNavigate()
   const { scenarios, examples } = useMemo(() => getRandomContent(), [])
   const [messages, setMessages] = useState(() => loadSessionChat())
   const [loading, setLoading] = useState(false)
@@ -315,7 +333,7 @@ export default function ChatPage() {
       {/* Content — scrollable */}
       <main className="flex-1 overflow-y-auto max-w-xl mx-auto w-full px-6 pt-8 pb-4">
         {!inChat ? (
-          <LandingView scenarios={scenarios} examples={examples} onFill={handleFill} onOpenFortune={() => setShowFortune(true)} />
+          <LandingView scenarios={scenarios} examples={examples} onFill={handleFill} onOpenFortune={() => setShowFortune(true)} onGoQuiz={() => navigate('/quiz')} />
         ) : (
           <ChatView messages={messages} loading={loading} onSend={handleSend} onRetry={handleRetry} bottomRef={bottomRef} />
         )}
