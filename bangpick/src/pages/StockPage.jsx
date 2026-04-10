@@ -1,11 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import ChatInput from '../components/ChatInput'
 import StockMessageBubble from '../components/StockChat'
 import StockSearch from '../components/StockSearch'
 import SectorChips from '../components/SectorChips'
 import BottomNav from '../components/BottomNav'
+import LanguageSwitcher from '../components/LanguageSwitcher'
 import PnLChart from '../components/PnLChart'
+import WatchlistWidget from '../components/WatchlistWidget'
 import { analyzeStockStream, searchStock } from '../lib/stockApi'
 import { getHoldings, addHolding, removeHolding } from '../lib/stockStorage'
 import { STOCK_FEATURES, STOCK_EXAMPLES, SECTORS, detectIntent } from '../lib/stockPrompts'
@@ -34,7 +37,8 @@ function readHotSectorsCache() {
   return []
 }
 
-function StockLandingView({ onFill, onStartHolding, onStartRecommend, onStartDoubleGolden, holdings, setHoldings }) {
+function StockLandingView({ onFill, onStartHolding, onStartRecommend, onStartDoubleGolden, holdings, setHoldings, onAnalyzeStock }) {
+  const { t } = useTranslation()
   const [hotSectors, setHotSectors] = useState(() => readHotSectorsCache())
   const [marketIndices, setMarketIndices] = useState([])
 
@@ -83,14 +87,14 @@ function StockLandingView({ onFill, onStartHolding, onStartRecommend, onStartDou
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium mb-4"
           style={{ background: 'rgba(182,160,255,0.08)', border: '1px solid rgba(182,160,255,0.15)', color: '#b6a0ff' }}>
           <span className="material-symbols-outlined text-xs" style={{ fontVariationSettings: "'FILL' 1" }}>verified</span>
-          基于实时行情数据
+          {t('stock.badge')}
         </div>
         <h2 className="text-[28px] font-extrabold tracking-tight mb-2 leading-[1.2]">
-          短线交易<span className="text-gradient">智能助手</span>
+          {t('stock.hero_title_1')}<span className="text-gradient">{t('stock.hero_title_2')}</span>
         </h2>
         <p className="text-[13px] leading-relaxed max-w-xs mx-auto" style={{ color: '#72757d' }}>
-          选股推荐 · 持仓诊断 · 双金叉形态<br />
-          <span style={{ color: '#f8a171', fontSize: '11px' }}>数据仅供参考，不构成投资建议</span>
+          {t('stock.hero_desc')}<br />
+          <span style={{ color: '#f8a171', fontSize: '11px' }}>{t('stock.hero_warn')}</span>
         </p>
       </section>
 
@@ -130,7 +134,7 @@ function StockLandingView({ onFill, onStartHolding, onStartRecommend, onStartDou
         <section className="mb-5">
           <div className="flex items-center gap-2 mb-3">
             <span className="material-symbols-outlined text-sm" style={{ color: '#72757d', fontVariationSettings: "'FILL' 1" }}>monitoring</span>
-            <span className="text-xs font-semibold" style={{ color: '#72757d' }}>今日大盘</span>
+            <span className="text-xs font-semibold" style={{ color: '#72757d' }}>{t('stock.market_indices')}</span>
           </div>
           <div className="grid grid-cols-3 gap-2">
             {marketIndices.map(idx => {
@@ -153,37 +157,9 @@ function StockLandingView({ onFill, onStartHolding, onStartRecommend, onStartDou
         </section>
       )}
 
-      {/* My Holdings — pill style */}
-      {holdings.length > 0 && (
-        <section className="mb-6">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="material-symbols-outlined text-sm" style={{ color: '#72757d' }}>account_balance_wallet</span>
-            <span className="text-xs font-semibold" style={{ color: '#72757d' }}>我的持仓</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {holdings.map(h => (
-              <div key={h.code} className="flex items-center rounded-full overflow-hidden"
-                style={{ background: 'rgba(182,160,255,0.06)', border: '1px solid rgba(182,160,255,0.12)' }}>
-                <button
-                  onClick={() => onFill(`帮我看看${h.code} ${h.name}，成本${h.costPrice}元`)}
-                  className="pl-3 pr-1 py-1.5 active:scale-[0.97] transition-all flex items-center gap-1.5"
-                >
-                  <span className="text-xs font-semibold" style={{ color: '#f1f3fc' }}>{h.name}</span>
-                  <span className="text-[10px] font-mono" style={{ color: '#b6a0ff' }}>{h.code}</span>
-                </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); setHoldings(removeHolding(h.code)) }}
-                  className="pr-2 pl-0.5 py-1.5 transition-colors hover:text-white/60 active:scale-90"
-                  style={{ color: '#44484f' }}
-                >
-                  <span className="material-symbols-outlined text-[14px]">close</span>
-                </button>
-              </div>
-            ))}
-          </div>
-          <PnLChart />
-        </section>
-      )}
+      {/* Watchlist Widget — full self-contained watchlist with live quotes */}
+      <WatchlistWidget onAnalyze={(code, name) => onAnalyzeStock(code, name)} />
+      <PnLChart />
 
       {/* Today's Hot — sector cards with fire */}
       <section className="mb-20">
@@ -192,7 +168,7 @@ function StockLandingView({ onFill, onStartHolding, onStartRecommend, onStartDou
             {hotSectors.length > 0 ? 'local_fire_department' : 'explore'}
           </span>
           <span className="text-xs font-semibold" style={{ color: '#72757d' }}>
-            {hotSectors.length > 0 ? '今日热门板块' : '快捷入口'}
+            {hotSectors.length > 0 ? t('stock.hot_sectors') : t('stock.quick_entry')}
           </span>
         </div>
         <div className="grid grid-cols-2 gap-2">
@@ -216,7 +192,7 @@ function StockLandingView({ onFill, onStartHolding, onStartRecommend, onStartDou
                 )}
               </div>
               <div className="text-[10px]" style={{ color: '#72757d' }}>
-                点击查看短线机会
+                {t('stock.click_chance')}
               </div>
             </button>
           ))}
@@ -295,6 +271,7 @@ function StockChatView({ messages, loading, onRetry, onSend, bottomRef }) {
 
 /* ===== Main Page ===== */
 export default function StockPage() {
+  const { t } = useTranslation()
   const [messages, setMessages] = useState(() => getStockChat())
   const [loading, setLoading] = useState(false)
   const [holdings, setHoldings] = useState(() => getHoldings())
@@ -681,9 +658,10 @@ export default function StockPage() {
         <div className="flex justify-between items-center px-6 h-16 w-full">
           <div className="flex items-center gap-3">
             <span className="material-symbols-outlined text-[var(--primary)]" style={{ fontVariationSettings: "'FILL' 1" }}>candlestick_chart</span>
-            <h1 className="text-xl font-black tracking-tighter text-[var(--primary)]" style={{ filter: 'drop-shadow(0 0 15px rgba(182,160,255,0.3))' }}>炒股助手</h1>
+            <h1 className="text-xl font-black tracking-tighter text-[var(--primary)]" style={{ filter: 'drop-shadow(0 0 15px rgba(182,160,255,0.3))' }}>{t('stock.title')}</h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <LanguageSwitcher />
             {inChat && (
               <button
                 onClick={handleClear}
@@ -700,7 +678,7 @@ export default function StockPage() {
       {/* Content */}
       <main className="flex-1 overflow-y-auto max-w-xl mx-auto w-full px-6 pt-8 pb-4">
         {!inChat ? (
-          <StockLandingView onFill={handleFill} onStartHolding={handleStartHolding} onStartRecommend={handleStartRecommend} onStartDoubleGolden={handleStartDoubleGolden} holdings={holdings} setHoldings={setHoldings} />
+          <StockLandingView onFill={handleFill} onStartHolding={handleStartHolding} onStartRecommend={handleStartRecommend} onStartDoubleGolden={handleStartDoubleGolden} holdings={holdings} setHoldings={setHoldings} onAnalyzeStock={(code, name) => handleSend(`帮我看看${code} ${name}`)} />
         ) : (
           <StockChatView messages={messages} loading={loading} onRetry={handleRetry} onSend={handleSend} bottomRef={bottomRef} />
         )}

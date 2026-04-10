@@ -9,7 +9,10 @@
     "api/stock-search.js": { "maxDuration": 15 },
     "api/chat.js": { "maxDuration": 300 },
     "api/cron-check-alerts.js": { "maxDuration": 60 },
-    "api/cron-snapshot.js": { "maxDuration": 60 }
+    "api/cron-snapshot.js": { "maxDuration": 60 },
+    "api/food-search.js": { "maxDuration": 30 },
+    "api/food-detail.js": { "maxDuration": 15 },
+    "api/food-photo.js": { "maxDuration": 15 }
   },
   "crons": [
     { "path": "/api/cron-check-alerts", "schedule": "0 7 * * 1-5" },

@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import i18n from '../i18n'
 import { CrystalBallIcon } from '../components/QuizIcons'
 import ChatInput from '../components/ChatInput'
 import OptionCard from '../components/OptionCard'
@@ -7,6 +9,7 @@ import RandomPicker from '../components/RandomPicker'
 import FortuneCard from '../components/FortuneCard'
 import FortuneModal from '../components/FortuneModal'
 import BottomNav from '../components/BottomNav'
+import LanguageSwitcher from '../components/LanguageSwitcher'
 import { sendMessage } from '../lib/minimax'
 import { buildSystemPrompt } from '../lib/prompt'
 import { saveDecision } from '../lib/storage'
@@ -27,17 +30,17 @@ const SCENARIO_COLORS = [
 ]
 
 /* ===== Landing View ===== */
-function LandingView({ scenarios, examples, onFill, onOpenFortune, onGoQuiz }) {
+function LandingView({ scenarios, examples, onFill, onOpenFortune, onGoQuiz, t }) {
   return (
     <div>
       {/* Hero */}
       <section className="mb-6">
         <h2 className="text-4xl md:text-6xl font-extrabold tracking-tight mb-4 leading-tight">
-          纠结的时候，<br />
-          <span className="text-gradient">交给我 ⚡</span>
+          {t('chat.hero_title_1')}<br />
+          <span className="text-gradient">{t('chat.hero_title_2')} ⚡</span>
         </h2>
         <p className="text-[var(--text-secondary)] text-lg font-medium max-w-lg opacity-80">
-          结合高维度算力与感知，为您在迷雾中划破决策的微光。
+          {t('chat.hero_desc')}
         </p>
       </section>
 
@@ -53,8 +56,8 @@ function LandingView({ scenarios, examples, onFill, onOpenFortune, onGoQuiz }) {
               style={{ background: 'color-mix(in srgb, #B6A0FF 15%, transparent)' }}>
               <CrystalBallIcon size={24} />
             </div>
-            <h5 className="text-[15px] font-bold text-[var(--text)] mb-0.5">人格测试</h5>
-            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">决策 & 投资人格</p>
+            <h5 className="text-[15px] font-bold text-[var(--text)] mb-0.5">{t('chat.quiz')}</h5>
+            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{t('chat.quiz_desc')}</p>
           </button>
         </div>
       </section>
@@ -203,6 +206,7 @@ function persistSessionChat(messages) {
 
 /* ===== Main Page ===== */
 export default function ChatPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { scenarios, examples } = useMemo(() => getRandomContent(), [])
   const [messages, setMessages] = useState(() => loadSessionChat())
@@ -250,7 +254,7 @@ export default function ChatPage() {
     setLoading(true)
 
     try {
-      const systemPrompt = buildSystemPrompt(locationText)
+      const systemPrompt = buildSystemPrompt(locationText, i18n.language)
       // Send only the trailing context window so prompt size stays bounded
       // while still preserving multi-turn follow-ups ("再便宜点的呢？").
       const apiMessages = [...messages, userMsg]
@@ -308,9 +312,10 @@ export default function ChatPage() {
         <div className="flex justify-between items-center px-6 h-16 w-full">
           <div className="flex items-center gap-3">
             <span className="material-symbols-outlined text-[var(--primary)]" style={{ fontVariationSettings: "'FILL' 1" }}>auto_awesome</span>
-            <h1 className="text-xl font-black tracking-tighter text-[var(--primary)]" style={{ filter: 'drop-shadow(0 0 15px rgba(182,160,255,0.3))' }}>帮我选</h1>
+            <h1 className="text-xl font-black tracking-tighter text-[var(--primary)]" style={{ filter: 'drop-shadow(0 0 15px rgba(182,160,255,0.3))' }}>{t('app.title')}</h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <LanguageSwitcher />
             {cityName && (
               <div className="flex items-center gap-1 text-slate-400 text-sm">
                 <span className="material-symbols-outlined text-sm">location_on</span>
@@ -333,7 +338,7 @@ export default function ChatPage() {
       {/* Content — scrollable */}
       <main className="flex-1 overflow-y-auto max-w-xl mx-auto w-full px-6 pt-8 pb-4">
         {!inChat ? (
-          <LandingView scenarios={scenarios} examples={examples} onFill={handleFill} onOpenFortune={() => setShowFortune(true)} onGoQuiz={() => navigate('/quiz')} />
+          <LandingView scenarios={scenarios} examples={examples} onFill={handleFill} onOpenFortune={() => setShowFortune(true)} onGoQuiz={() => navigate('/quiz')} t={t} />
         ) : (
           <ChatView messages={messages} loading={loading} onSend={handleSend} onRetry={handleRetry} bottomRef={bottomRef} />
         )}

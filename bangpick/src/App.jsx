@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import ChatPage from './pages/ChatPage'
 import FriendPage from './pages/FriendPage'
 import HistoryPage from './pages/HistoryPage'
@@ -8,7 +8,7 @@ import QuizPlayPage from './pages/QuizPlayPage'
 import QuizResultPage from './pages/QuizResultPage'
 import SharePage from './pages/SharePage'
 import StockPage from './pages/StockPage'
-import WatchlistPage from './pages/WatchlistPage'
+import FoodPage from './pages/FoodPage'
 import NotificationBanner from './components/NotificationBanner'
 import { hydrateOnBoot } from './lib/cloudSync'
 
@@ -23,7 +23,8 @@ export default function App() {
       <Routes>
         <Route path="/" element={<ChatPage />} />
         <Route path="/stock" element={<StockPage />} />
-        <Route path="/watchlist" element={<WatchlistPage />} />
+        <Route path="/watchlist" element={<Navigate to="/stock" replace />} />
+        <Route path="/food" element={<FoodPage />} />
         <Route path="/history" element={<HistoryPage />} />
         <Route path="/quiz" element={<QuizPage />} />
         <Route path="/quiz/:type" element={<QuizPlayPage />} />
