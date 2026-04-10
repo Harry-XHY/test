@@ -89,7 +89,7 @@ function vercelApiPlugin() {
       })
 
       server.middlewares.use(async (req, res, next) => {
-        if (!req.url.startsWith('/api/stock-') && !req.url.startsWith('/api/chat') && !req.url.startsWith('/api/food-')) return next()
+        if (!req.url.startsWith('/api/stock-') && !req.url.startsWith('/api/chat') && !req.url.startsWith('/api/food')) return next()
 
         console.log(`[api] ${req.method} ${req.url}`)
         const apiDir = path.resolve(fileURLToPath(import.meta.url), '..', 'api')
