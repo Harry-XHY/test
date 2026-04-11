@@ -62,7 +62,7 @@ const ChatInput = forwardRef(function ChatInput({ onSend, disabled }, ref) {
   const hasText = text.trim().length > 0
 
   return (
-    <div className="flex-shrink-0 w-full max-w-xl mx-auto px-4 py-2 pb-[env(safe-area-inset-bottom,8px)]">
+    <div className="flex-shrink-0 w-full max-w-xl mx-auto px-4 py-2">
       <form onSubmit={handleSubmit}
         className="backdrop-blur-2xl rounded-[24px] p-2 flex items-center gap-3"
         style={{

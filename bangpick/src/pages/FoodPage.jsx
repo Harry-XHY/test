@@ -129,7 +129,7 @@ export default function FoodPage() {
   }
 
   return (
-    <div className="flex flex-col bg-[#080b10]" style={{ height: appHeight, paddingBottom: keyboardOpen ? 0 : 'calc(5rem + env(safe-area-inset-bottom, 0px))' }}>
+    <div className="flex flex-col bg-[#080b10]" style={{ height: appHeight }}>
       {/* Ambient glow */}
       <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] pointer-events-none" style={{
         background: 'radial-gradient(ellipse at center, rgba(245,158,11,0.06) 0%, rgba(245,158,11,0.02) 40%, transparent 70%)',
@@ -349,6 +349,7 @@ export default function FoodPage() {
         }
       }} />
 
+      {!keyboardOpen && <div className="flex-shrink-0 h-16" />}
       {!keyboardOpen && <BottomNav />}
 
       {detail && (

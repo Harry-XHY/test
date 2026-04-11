@@ -307,7 +307,7 @@ export default function ChatPage() {
   const cityName = loc ? [loc.city, loc.district].filter(Boolean).join(' ') || loc.city : ''
 
   return (
-    <div className={`flex flex-col bg-gradient-to-br from-[#0a0e14] via-[#0f141a] to-[#0a0e14] `} style={{ height: appHeight, paddingBottom: keyboardOpen ? 0 : 'calc(5rem + env(safe-area-inset-bottom, 0px))' }}>
+    <div className={`flex flex-col bg-gradient-to-br from-[#0a0e14] via-[#0f141a] to-[#0a0e14] `} style={{ height: appHeight }}>
       {/* Header */}
       <header className="flex-shrink-0 bg-[#0a0e14]/80 backdrop-blur-xl z-50 shadow-[0_4px_30px_rgba(0,0,0,0.1)]">
         <div className="flex justify-between items-center px-5 h-14 w-full">
@@ -362,6 +362,7 @@ export default function ChatPage() {
         </>
       )}
 
+      {!keyboardOpen && <div className="flex-shrink-0 h-16" />}
       {!keyboardOpen && <BottomNav />}
     </div>
   )
