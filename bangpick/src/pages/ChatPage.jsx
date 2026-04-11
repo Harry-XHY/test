@@ -316,16 +316,18 @@ export default function ChatPage() {
             <h1 className="text-lg font-black tracking-tighter text-[var(--primary)]" style={{ filter: 'drop-shadow(0 0 15px rgba(182,160,255,0.3))' }}>{t('app.title')}</h1>
           </div>
           <div className="flex items-center gap-2">
-            <LanguageSwitcher />
             {cityName && (
               <button
                 onClick={() => requestLocation()}
-                className="w-8 h-8 rounded-full grid place-items-center text-[var(--muted)] hover:bg-white/10 transition-colors"
+                className="flex items-center gap-1 px-2 py-1.5 rounded-xl text-[11px] font-medium transition-all active:scale-95"
+                style={{ color: '#8b8e96', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}
                 title={cityName}
               >
-                <span className="material-symbols-outlined text-[18px]">location_on</span>
+                <span className="material-symbols-outlined text-[13px]" style={{ color: '#22c55e' }}>location_on</span>
+                <span className="max-w-[60px] truncate">{cityName}</span>
               </button>
             )}
+            <LanguageSwitcher />
             {inChat && (
               <button
                 onClick={() => { setMessages([]); try { sessionStorage.removeItem(SESSION_CHAT_KEY) } catch { /* ignore */ } }}
