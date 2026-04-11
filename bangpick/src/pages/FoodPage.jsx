@@ -87,9 +87,14 @@ export default function FoodPage() {
     )
   }, [])
 
+  const searchRadiusRef = useRef(1500)
+  const restaurantsRef = useRef([])
+  restaurantsRef.current = restaurants
+  searchRadiusRef.current = searchRadius
+
   const doSearch = useCallback(async (pos, keyword, loadMore = false) => {
     if (!pos) return
-    const radius = loadMore ? searchRadius * 2 : 1500
+    const radius = loadMore ? searchRadiusRef.current * 2 : 1500
     if (loadMore) {
       setLoadingMore(true)
     } else {
@@ -107,7 +112,7 @@ export default function FoodPage() {
         language: i18n.language,
       })
       if (loadMore) {
-        const existingIds = new Set(restaurants.map(r => r.placeId))
+        const existingIds = new Set(restaurantsRef.current.map(r => r.placeId))
         const newResults = results.filter(r => !existingIds.has(r.placeId))
         if (newResults.length === 0) {
           setHasMore(false)
@@ -115,7 +120,6 @@ export default function FoodPage() {
           setRestaurants(prev => [...prev, ...newResults])
           setSearchRadius(radius)
         }
-        // Stop expanding beyond 10km
         if (radius >= 10000) setHasMore(false)
       } else {
         setRestaurants(results)
@@ -127,7 +131,7 @@ export default function FoodPage() {
       setLoading(false)
       setLoadingMore(false)
     }
-  }, [t, searchRadius, restaurants])
+  }, [t])
 
   useEffect(() => {
     if (!userPos) return
