@@ -204,7 +204,7 @@ export default function WatchlistWidget({ onAnalyze }) {
                         </div>
                       ) : volRatio != null ? (
                         <div className="text-[10px] mt-0.5" style={{ color: '#72757d' }}>
-                          量比 {fmt(volRatio)} {q?.macdSignal === 'golden_cross' ? ' · MACD金叉' : ''}
+                          {t('stock.vol_ratio')} {fmt(volRatio)} {q?.macdSignal === 'golden_cross' ? ` · ${t('stock.macd_golden')}` : ''}
                         </div>
                       ) : null}
                     </div>
@@ -253,9 +253,9 @@ export default function WatchlistWidget({ onAnalyze }) {
 
       {toasts.length > 0 && (
         <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-[calc(100vw-2rem)] w-80 pointer-events-none">
-          {toasts.map(t => (
+          {toasts.map(toast => (
             <div
-              key={t.id}
+              key={toast.id}
               className="pointer-events-auto rounded-xl px-4 py-3 shadow-2xl backdrop-blur-xl flex items-start gap-2 animate-[slideInRight_0.3s_ease-out]"
               style={{
                 background: 'linear-gradient(135deg, rgba(91,140,255,0.95), rgba(122,124,255,0.95))',
@@ -264,9 +264,9 @@ export default function WatchlistWidget({ onAnalyze }) {
               }}
             >
               <span className="material-symbols-outlined text-[20px] flex-shrink-0 mt-0.5">notifications_active</span>
-              <div className="flex-1 text-sm leading-snug">{t.message}</div>
+              <div className="flex-1 text-sm leading-snug">{toast.message}</div>
               <button
-                onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))}
+                onClick={() => setToasts(prev => prev.filter(x => x.id !== toast.id))}
                 className="text-white/70 hover:text-white flex-shrink-0"
               >
                 <span className="material-symbols-outlined text-[18px]">close</span>

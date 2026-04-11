@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { searchStock } from '../lib/stockApi'
 import { getHoldings } from '../lib/stockStorage'
 
 export default function StockSearch({ onSubmit, onSend, compact }) {
+  const { t } = useTranslation()
   const [query, setQuery] = useState('')
   const [suggestions, setSuggestions] = useState([])
   const [selected, setSelected] = useState(null)
@@ -47,8 +49,8 @@ export default function StockSearch({ onSubmit, onSend, compact }) {
     const hasCost = costPrice && parseFloat(costPrice) > 0
     if (onSend) {
       const msg = hasCost
-        ? `帮我看看${selected.code} ${selected.name}，成本${costPrice}元`
-        : `帮我看看${selected.code} ${selected.name}`
+        ? `${t('stock.analyze_prefix')} ${selected.code} ${selected.name}，${t('stock.cost_placeholder')}${costPrice}`
+        : `${t('stock.analyze_prefix')} ${selected.code} ${selected.name}`
       onSend(msg)
     } else if (onSubmit) {
       onSubmit({ ...selected, costPrice: hasCost ? parseFloat(costPrice) : null })
@@ -78,20 +80,20 @@ export default function StockSearch({ onSubmit, onSend, compact }) {
         <div className="flex items-center gap-1.5">
           <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold"
             style={{ background: 'rgba(182,160,255,0.2)', color: '#b6a0ff' }}>1</span>
-          <span className="text-xs" style={{ color: step === 1 ? '#f1f3fc' : '#72757d' }}>选股票</span>
+          <span className="text-xs" style={{ color: step === 1 ? '#f1f3fc' : '#72757d' }}>{t('stock.search_stock')}</span>
         </div>
         <div className="w-6 h-px" style={{ background: 'rgba(255,255,255,0.1)' }} />
         <div className="flex items-center gap-1.5">
           <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold"
             style={{ background: step >= 2 ? 'rgba(182,160,255,0.2)' : 'rgba(255,255,255,0.06)', color: step >= 2 ? '#b6a0ff' : '#72757d' }}>2</span>
-          <span className="text-xs" style={{ color: step >= 2 ? '#f1f3fc' : '#72757d' }}>成本价<span style={{ color: '#72757d' }}>（选填）</span></span>
+          <span className="text-xs" style={{ color: step >= 2 ? '#f1f3fc' : '#72757d' }}>{t('stock.cost_optional')}</span>
         </div>
       </div>
 
       {/* Quick holdings */}
       {step === 1 && holdings.length > 0 && !query && (
         <div>
-          <div className="text-xs mb-2" style={{ color: '#72757d' }}>快捷选择持仓股</div>
+          <div className="text-xs mb-2" style={{ color: '#72757d' }}>{t('stock.quick_holdings')}</div>
           <div className="flex flex-wrap gap-1.5">
             {holdings.map(h => (
               <button key={h.code} type="button" onClick={() => handleHoldingClick(h)}
@@ -111,7 +113,7 @@ export default function StockSearch({ onSubmit, onSend, compact }) {
           <input
             value={query}
             onChange={e => { setQuery(e.target.value); setSelected(null); setStep(1) }}
-            placeholder="输入代码或名称，如 000001 或 平安银行"
+            placeholder={t('stock.search_placeholder')}
             className="w-full rounded-xl pl-9 pr-9 py-2.5 text-sm outline-none transition-all"
             style={{
               background: 'rgba(255,255,255,0.06)',
@@ -142,7 +144,7 @@ export default function StockSearch({ onSubmit, onSend, compact }) {
                   <span className="font-mono font-medium" style={{ color: '#b6a0ff' }}>{s.code}</span>
                   <span style={{ color: '#f1f3fc' }}>{s.name}</span>
                   <span className="ml-auto text-xs px-1.5 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.06)', color: '#72757d' }}>
-                    {s.market === 1 ? '沪A' : '深A'}
+                    {s.market === 1 ? t('stock.market_sh') : t('stock.market_sz')}
                   </span>
                 </button>
               ))}
@@ -160,7 +162,7 @@ export default function StockSearch({ onSubmit, onSend, compact }) {
                 type="number"
                 value={costPrice}
                 onChange={e => setCostPrice(e.target.value)}
-                placeholder="买入成本价"
+                placeholder={t('stock.cost_placeholder')}
                 min="0.01"
                 step="0.01"
                 className="w-full rounded-xl pl-7 pr-3 py-2.5 text-sm outline-none"
@@ -176,7 +178,7 @@ export default function StockSearch({ onSubmit, onSend, compact }) {
               style={{ background: 'linear-gradient(135deg, #5B8CFF, #7A7CFF)', color: '#fff' }}>
               <span className="flex items-center gap-1.5">
                 <span className="material-symbols-outlined text-base">analytics</span>
-                诊断
+                {t('stock.diagnose')}
               </span>
             </button>
           </div>

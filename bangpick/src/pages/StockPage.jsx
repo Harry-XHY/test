@@ -141,7 +141,7 @@ function StockLandingView({ onFill, onStartHolding, onStartRecommend, onStartDou
               const up = idx.change >= 0
               return (
                 <button key={idx.name}
-                  onClick={() => onFill(`分析一下今天${idx.name}的走势`)}
+                  onClick={() => onFill(t('stock.analyze_market', { name: idx.name }))}
                   className="p-3 rounded-xl text-center active:scale-[0.97] transition-all"
                   style={{ background: up ? 'rgba(239,68,68,0.05)' : 'rgba(34,197,94,0.05)', border: `1px solid ${up ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)'}` }}
                 >
@@ -203,7 +203,7 @@ function StockLandingView({ onFill, onStartHolding, onStartRecommend, onStartDou
 }
 
 /* ===== Chat View ===== */
-function StockChatView({ messages, loading, onRetry, onSend, bottomRef }) {
+function StockChatView({ messages, loading, onRetry, onSend, bottomRef, t }) {
   return (
     <div className="space-y-4 pt-1">
       {messages.map((msg, i) => (
@@ -218,7 +218,7 @@ function StockChatView({ messages, loading, onRetry, onSend, bottomRef }) {
             <div className="max-w-[85%] glass-card rounded-[20px] rounded-bl-md px-4 py-3 stock-fade-in">
               <p className="text-red-400 text-sm">{msg.content}</p>
               <button onClick={() => onRetry(msg)} className="mt-2 text-xs text-[var(--primary)] font-medium">
-                🔄 重新发送
+                {t('stock.retry')}
               </button>
             </div>
           )}
@@ -259,7 +259,7 @@ function StockChatView({ messages, loading, onRetry, onSend, bottomRef }) {
               <span className="w-2 h-2 rounded-full bg-[var(--muted)] animate-bounce" style={{ animationDelay: '150ms' }} />
               <span className="w-2 h-2 rounded-full bg-[var(--muted)] animate-bounce" style={{ animationDelay: '300ms' }} />
             </span>
-            <span className="text-[var(--muted)] text-sm">获取行情数据中</span>
+            <span className="text-[var(--muted)] text-sm">{t('stock.thinking')}</span>
           </div>
         </div>
       )}
@@ -419,7 +419,7 @@ export default function StockPage() {
             if (assistantMsgIdx.current >= 0) return prev
             return [...prev, {
               role: 'assistant',
-              content: err.message || '分析失败，请稍后重试',
+              content: err.message || t('stock.analyze_fail'),
               error: true,
               _retryText: trimmed,
             }]
@@ -444,7 +444,7 @@ export default function StockPage() {
     if (intent.type === 'reject_unrealistic') {
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: '我无法为您承诺任何盈利，股市不存在100%赚钱的交易，短线交易风险极高，请您理性投资。\n\n建议仓位不超过总资金的30%，严格执行止损止盈纪律。',
+        content: t('stock.reject_unrealistic'),
       }])
       setLoading(false)
       return
@@ -453,7 +453,7 @@ export default function StockPage() {
     if (intent.type === 'out_of_scope') {
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: '我仅为A股1-5个交易日短线交易的小白专属助手，无法为您提供港股、美股、期货、基金定投、长线投资等超出该范围的服务。\n\n你可以试试：\n• 输入板块名看短线机会\n• 输入股票名称或代码查诊断\n• 问问今天大盘怎么样',
+        content: t('stock.out_of_scope'),
       }])
       setLoading(false)
       return
@@ -462,7 +462,7 @@ export default function StockPage() {
     if (intent.type === 'off_topic') {
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: '我是A股短线交易小白专属助手，只能回答股票相关的问题哦～\n\n你可以试试：\n• 输入板块名看短线机会\n• 输入股票名称或代码查诊断\n• 问问今天大盘怎么样\n• 粘贴一条新闻帮你解读利好利空',
+        content: t('stock.off_topic'),
       }])
       setLoading(false)
       return
@@ -489,7 +489,7 @@ export default function StockPage() {
       } else {
         setMessages(prev => [...prev, {
           role: 'assistant',
-          content: `没有找到"${intent.name || intent.code}"对应的股票，请检查名称或代码。`,
+          content: t('stock.stock_not_found', { name: intent.name || intent.code }),
           error: true,
         }])
         setLoading(false)
@@ -594,7 +594,7 @@ export default function StockPage() {
           if (assistantMsgIdx.current >= 0) return prev
           return [...prev, {
             role: 'assistant',
-            content: err.message || '分析失败，请稍后重试',
+            content: err.message || t('stock.analyze_fail'),
             error: true,
             _retryText: trimmed,
           }]
@@ -628,17 +628,17 @@ export default function StockPage() {
   function handleStartHolding() {
     setMessages(prev => [...prev, {
       role: 'assistant',
-      content: '请搜索你持有的股票，输入成本价后我来帮你诊断：',
+      content: t('stock.holding_prompt'),
       showSearch: true,
     }])
   }
 
   function handleStartRecommend() {
-    handleSend('推荐今日短线机会')
+    handleSend(t('stock.recommend_prompt'))
   }
 
   function handleStartDoubleGolden() {
-    handleSend('🔥 帮我找今日双金叉短线机会', {
+    handleSend(t('stock.double_golden_prompt'), {
       overridePayload: {
         type: 'recommend',
         filter: 'double_golden_cross',
@@ -678,9 +678,9 @@ export default function StockPage() {
       {/* Content */}
       <main className="flex-1 overflow-y-auto max-w-xl mx-auto w-full px-6 pt-8 pb-4">
         {!inChat ? (
-          <StockLandingView onFill={handleFill} onStartHolding={handleStartHolding} onStartRecommend={handleStartRecommend} onStartDoubleGolden={handleStartDoubleGolden} holdings={holdings} setHoldings={setHoldings} onAnalyzeStock={(code, name) => handleSend(`帮我看看${code} ${name}`)} />
+          <StockLandingView onFill={handleFill} onStartHolding={handleStartHolding} onStartRecommend={handleStartRecommend} onStartDoubleGolden={handleStartDoubleGolden} holdings={holdings} setHoldings={setHoldings} onAnalyzeStock={(code, name) => handleSend(`${t('stock.analyze_prefix')} ${code} ${name}`)} />
         ) : (
-          <StockChatView messages={messages} loading={loading} onRetry={handleRetry} onSend={handleSend} bottomRef={bottomRef} />
+          <StockChatView messages={messages} loading={loading} onRetry={handleRetry} onSend={handleSend} bottomRef={bottomRef} t={t} />
         )}
       </main>
 

@@ -1,7 +1,9 @@
 import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { getTodayFortune, isFortuneDrawn } from '../lib/fortunes'
 
 export default function FortuneCard({ onOpen }) {
+  const { t } = useTranslation()
   const drawn = isFortuneDrawn()
   const fortune = useMemo(() => drawn ? getTodayFortune() : null, [drawn])
 
@@ -15,12 +17,12 @@ export default function FortuneCard({ onOpen }) {
         <span className="material-symbols-outlined text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>flare</span>
       </div>
       <h5 className="text-[15px] font-bold text-[var(--text)] mb-0.5">
-        {drawn ? fortune.level : '每日一签'}
+        {drawn ? fortune.level : t('chat.fortune_undraw')}
       </h5>
       <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
         {drawn
           ? (fortune.message.length > 10 ? fortune.message.slice(0, 10) + '…' : fortune.message)
-          : '看看决策运势'}
+          : t('chat.fortune_undraw_desc')}
       </p>
     </button>
   )

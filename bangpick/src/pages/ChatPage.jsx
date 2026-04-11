@@ -65,7 +65,7 @@ function LandingView({ scenarios, examples, onFill, onOpenFortune, onGoQuiz, t }
       {/* Quick Scenarios — Grid */}
       <section className="mb-8">
         <div className="flex items-center justify-between mb-3">
-          <h4 className="text-sm font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]/60 px-1">Quick Scenarios</h4>
+          <h4 className="text-sm font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]/60 px-1">{t('chat.scenarios_title')}</h4>
           <div className="h-[1px] flex-grow mx-4 bg-[var(--muted-2)]/30"></div>
         </div>
         <div className="grid grid-cols-2 gap-2.5">
@@ -96,7 +96,7 @@ function LandingView({ scenarios, examples, onFill, onOpenFortune, onGoQuiz, t }
 
       {/* Try Asking Me */}
       <section className="mb-20">
-        <h4 className="text-sm font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]/60 mb-6 px-1">Try asking me</h4>
+        <h4 className="text-sm font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]/60 mb-6 px-1">{t('chat.try_asking')}</h4>
         <div className="space-y-3">
           {examples.map((ex) => (
             <button key={ex} onClick={() => onFill(ex)}
@@ -113,7 +113,7 @@ function LandingView({ scenarios, examples, onFill, onOpenFortune, onGoQuiz, t }
 }
 
 /* ===== Chat View ===== */
-function ChatView({ messages, loading, onSend, onRetry, bottomRef }) {
+function ChatView({ messages, loading, onSend, onRetry, bottomRef, t }) {
   return (
     <div className="space-y-4 pt-1">
       {messages.map((msg, i) => (
@@ -125,7 +125,7 @@ function ChatView({ messages, loading, onSend, onRetry, bottomRef }) {
               <div className="glass-card rounded-[20px] rounded-bl-md px-4 py-3">
                 <p className="text-red-400 text-sm">{msg.content}</p>
                 <button onClick={() => onRetry(msg)} className="mt-2 text-xs text-[var(--primary)] font-medium">
-                  🔄 重新发送
+                  {t('chat.retry')}
                 </button>
               </div>
             )}
@@ -135,7 +135,7 @@ function ChatView({ messages, loading, onSend, onRetry, bottomRef }) {
                   <OptionCard key={idx} option={opt} rank={idx} onSelect={onSend} />
                 ))}
                 {msg.parsed.options.length >= 2 && (
-                  <RandomPicker options={msg.parsed.options} onPick={(name) => onSend(`就选${name}`)} />
+                  <RandomPicker options={msg.parsed.options} onPick={(name) => onSend(t('chat.pick_this', { name }))} />
                 )}
               </div>
             )}
@@ -173,7 +173,7 @@ function ChatView({ messages, loading, onSend, onRetry, bottomRef }) {
               <span className="w-2 h-2 rounded-full bg-[var(--muted)] animate-bounce" style={{ animationDelay: '150ms' }} />
               <span className="w-2 h-2 rounded-full bg-[var(--muted)] animate-bounce" style={{ animationDelay: '300ms' }} />
             </span>
-            <span className="text-[var(--muted)] text-sm">思考中</span>
+            <span className="text-[var(--muted)] text-sm">{t('chat.thinking')}</span>
           </div>
         </div>
       )}
@@ -340,7 +340,7 @@ export default function ChatPage() {
         {!inChat ? (
           <LandingView scenarios={scenarios} examples={examples} onFill={handleFill} onOpenFortune={() => setShowFortune(true)} onGoQuiz={() => navigate('/quiz')} t={t} />
         ) : (
-          <ChatView messages={messages} loading={loading} onSend={handleSend} onRetry={handleRetry} bottomRef={bottomRef} />
+          <ChatView messages={messages} loading={loading} onSend={handleSend} onRetry={handleRetry} bottomRef={bottomRef} t={t} />
         )}
       </main>
 

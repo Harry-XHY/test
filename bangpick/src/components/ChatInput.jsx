@@ -1,4 +1,5 @@
 import { useState, useImperativeHandle, forwardRef, useRef, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 
 const SpeechRecognition = typeof window !== 'undefined'
   ? (window.SpeechRecognition || window.webkitSpeechRecognition)
@@ -7,7 +8,11 @@ const SpeechRecognition = typeof window !== 'undefined'
 // WeChat in-app browser exposes webkitSpeechRecognition but start() silently fails
 const isWeChatBrowser = typeof navigator !== 'undefined' && /MicroMessenger/i.test(navigator.userAgent)
 
+// Map i18n language codes to BCP 47 speech recognition codes
+const SPEECH_LANG_MAP = { zh: 'zh-CN', en: 'en-US', ja: 'ja-JP', es: 'es-ES', fr: 'fr-FR' }
+
 const ChatInput = forwardRef(function ChatInput({ onSend, disabled }, ref) {
+  const { t, i18n } = useTranslation()
   const [text, setText] = useState('')
   const [listening, setListening] = useState(false)
   const recognitionRef = useRef(null)
@@ -35,11 +40,12 @@ const ChatInput = forwardRef(function ChatInput({ onSend, disabled }, ref) {
       return
     }
     if (!SpeechRecognition || isWeChatBrowser) {
-      alert('微信浏览器暂不支持语音输入，请使用系统浏览器')
+      alert(t('chat.voice_unsupported'))
       return
     }
     const recognition = new SpeechRecognition()
-    recognition.lang = 'zh-CN'
+    const baseLang = i18n.language?.split('-')[0] || 'zh'
+    recognition.lang = SPEECH_LANG_MAP[baseLang] || 'zh-CN'
     recognition.interimResults = true
     recognition.continuous = false
     recognitionRef.current = recognition
@@ -70,7 +76,7 @@ const ChatInput = forwardRef(function ChatInput({ onSend, disabled }, ref) {
             type="text"
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder={listening ? '正在听你说...' : '描述你的犹豫...'}
+            placeholder={listening ? t('chat.placeholder_listening') : t('chat.placeholder')}
             disabled={disabled || listening}
             className="bg-transparent border-none outline-none ring-0 w-full text-[15px] text-white placeholder-[var(--muted)] focus:ring-0 disabled:opacity-50"
           />
