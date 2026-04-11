@@ -70,15 +70,20 @@ function StockLandingView({ onFill, onStartHolding, onStartRecommend, onStartDou
 
   // Build dynamic examples from hot sectors
   const dynamicExamples = hotSectors.length > 0
-    ? [
-        ...hotSectors.slice(0, 6).map(s => ({
-          text: `${s.sector}板块有什么短线机会？`,
-          icon: 'local_fire_department',
-          tag: `${s.avgChange > 0 ? '+' : ''}${s.avgChange}%`,
-          hot: s.avgChange >= 2,
-        })),
-      ]
-    : STOCK_EXAMPLES
+    ? hotSectors.slice(0, 6).map(s => ({
+        text: `${s.sector}${t('stock.sector_chance')}`,
+        sectorName: s.sector,
+        icon: 'local_fire_department',
+        tag: `${s.avgChange > 0 ? '+' : ''}${s.avgChange}%`,
+        hot: s.avgChange >= 2,
+      }))
+    : STOCK_EXAMPLES.map(ex => ({
+        text: t(`stock.${ex.key}`),
+        sectorName: null,
+        icon: ex.icon,
+        tag: null,
+        hot: false,
+      }))
 
   return (
     <div>
@@ -120,8 +125,8 @@ function StockLandingView({ onFill, onStartHolding, onStartRecommend, onStartDou
                   <span className="material-symbols-outlined text-xl" style={{ color, fontVariationSettings: "'FILL' 1" }}>{f.icon}</span>
                 </div>
                 <div>
-                  <div className="text-xs font-bold" style={{ color: '#f1f3fc' }}>{f.title}</div>
-                  <div className="text-[10px] mt-0.5 leading-snug" style={{ color: '#72757d' }}>{f.desc}</div>
+                  <div className="text-xs font-bold" style={{ color: '#f1f3fc' }}>{t(`stock.${f.key}`)}</div>
+                  <div className="text-[10px] mt-0.5 leading-snug" style={{ color: '#72757d' }}>{t(`stock.${f.key}_desc`)}</div>
                 </div>
               </button>
             )
@@ -157,12 +162,8 @@ function StockLandingView({ onFill, onStartHolding, onStartRecommend, onStartDou
         </section>
       )}
 
-      {/* Watchlist Widget — full self-contained watchlist with live quotes */}
-      <WatchlistWidget onAnalyze={(code, name) => onAnalyzeStock(code, name)} />
-      <PnLChart />
-
       {/* Today's Hot — sector cards with fire */}
-      <section className="mb-20">
+      <section className="mb-4">
         <div className="flex items-center gap-2 mb-3">
           <span className="material-symbols-outlined text-sm" style={{ color: hotSectors.length > 0 ? '#f87171' : '#72757d', fontVariationSettings: "'FILL' 1" }}>
             {hotSectors.length > 0 ? 'local_fire_department' : 'explore'}
@@ -182,7 +183,7 @@ function StockLandingView({ onFill, onStartHolding, onStartRecommend, onStartDou
             >
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold" style={{ color: '#f1f3fc' }}>
-                  {ex.text.replace('板块有什么短线机会？', '')}
+                  {ex.sectorName || ex.text}
                 </span>
                 {ex.tag && (
                   <span className="text-[11px] font-bold font-mono"
@@ -198,6 +199,9 @@ function StockLandingView({ onFill, onStartHolding, onStartRecommend, onStartDou
           ))}
         </div>
       </section>
+
+      {/* Watchlist Widget — full self-contained watchlist with live quotes */}
+      <WatchlistWidget onAnalyze={(code, name) => onAnalyzeStock(code, name)} />
     </div>
   )
 }
@@ -234,7 +238,7 @@ function StockChatView({ messages, loading, onRetry, onSend, bottomRef, t }) {
             <div className="max-w-[90%] stock-fade-in">
               <div className="glass-card rounded-[20px] rounded-bl-md p-4">
                 <p className="text-sm mb-3" style={{ color: '#a8abb3' }}>{msg.content}</p>
-                <SectorChips selected={null} onSelect={(sector) => onSend(`${sector}板块有什么短线机会？`)} />
+                <SectorChips selected={null} onSelect={(sector) => onSend(`${sector}${t('stock.sector_chance')}`)} />
               </div>
             </div>
           )}
@@ -305,9 +309,10 @@ export default function StockPage() {
   useEffect(() => {
     const vv = window.visualViewport
     if (!vv) return
+    const initH = vv.height
     function updateHeight() {
       setAppHeight(`${vv.height}px`)
-      setKeyboardOpen(window.innerHeight - vv.height > 100)
+      setKeyboardOpen(initH - vv.height > 100)
       window.scrollTo(0, 0)
       document.documentElement.scrollTop = 0
     }
@@ -652,7 +657,7 @@ export default function StockPage() {
   const inChat = messages.length > 0
 
   return (
-    <div className={`flex flex-col bg-gradient-to-br from-[#0a0e14] via-[#0f141a] to-[#0a0e14] ${keyboardOpen ? '' : 'pb-20'}`} style={{ height: appHeight }}>
+    <div className={`flex flex-col bg-gradient-to-br from-[#0a0e14] via-[#0f141a] to-[#0a0e14] `} style={{ height: appHeight, paddingBottom: keyboardOpen ? 0 : 'calc(5rem + env(safe-area-inset-bottom, 0px))' }}>
       {/* Header */}
       <header className="flex-shrink-0 bg-[#0a0e14]/80 backdrop-blur-xl z-50 shadow-[0_4px_30px_rgba(0,0,0,0.1)]">
         <div className="flex justify-between items-center px-6 h-16 w-full">

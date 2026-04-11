@@ -73,8 +73,8 @@ function LandingView({ scenarios, examples, onFill, onOpenFortune, onGoQuiz, t }
             const color = SCENARIO_COLORS[idx % SCENARIO_COLORS.length]
             return (
               <button
-                key={s.title}
-                onClick={() => onFill(s.fill)}
+                key={s.key}
+                onClick={() => onFill(t(`scenarios.${s.key}_fill`))}
                 className="glass-card p-3.5 rounded-2xl text-left cursor-pointer active:scale-[0.96] transition-all duration-300 group relative overflow-hidden"
               >
                 <div className="absolute top-0 right-0 w-20 h-20 rounded-full blur-[40px] opacity-15 -translate-y-1/2 translate-x-1/3 transition-opacity group-hover:opacity-30" style={{ background: color }} />
@@ -86,8 +86,8 @@ function LandingView({ scenarios, examples, onFill, onOpenFortune, onGoQuiz, t }
                     {SCENARIO_ICONS[s.emoji] || 'help'}
                   </span>
                 </div>
-                <h5 className="text-sm font-bold text-[var(--text)] mb-0.5">{s.title}</h5>
-                <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">{s.desc}</p>
+                <h5 className="text-sm font-bold text-[var(--text)] mb-0.5">{t(`scenarios.${s.key}_title`)}</h5>
+                <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">{t(`scenarios.${s.key}_desc`)}</p>
               </button>
             )
           })}
@@ -98,11 +98,11 @@ function LandingView({ scenarios, examples, onFill, onOpenFortune, onGoQuiz, t }
       <section className="mb-20">
         <h4 className="text-sm font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]/60 mb-6 px-1">{t('chat.try_asking')}</h4>
         <div className="space-y-3">
-          {examples.map((ex) => (
-            <button key={ex} onClick={() => onFill(ex)}
+          {examples.map((idx) => (
+            <button key={idx} onClick={() => onFill(t(`examples.${idx}`))}
               className="w-full text-left p-5 bg-[#0f141a] hover:bg-[#1b2028] rounded-2xl flex items-center justify-between group transition-all duration-300"
             >
-              <span className="text-[var(--text)] font-medium">"{ex}"</span>
+              <span className="text-[var(--text)] font-medium">"{t(`examples.${idx}`)}"</span>
               <span className="material-symbols-outlined text-[var(--muted-2)] group-hover:text-[var(--primary)] transition-colors">arrow_outward</span>
             </button>
           ))}
@@ -213,6 +213,7 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(false)
   const [locationText, setLocationText] = useState('')
   const [appHeight, setAppHeight] = useState('100%')
+  const [keyboardOpen, setKeyboardOpen] = useState(false)
   const [showFortune, setShowFortune] = useState(false)
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
@@ -226,13 +227,13 @@ export default function ChatPage() {
   useEffect(() => {
     const vv = window.visualViewport
     if (!vv) return
-
+    const initH = vv.height
     function updateHeight() {
       setAppHeight(`${vv.height}px`)
+      setKeyboardOpen(initH - vv.height > 100)
       window.scrollTo(0, 0)
       document.documentElement.scrollTop = 0
     }
-
     updateHeight()
     vv.addEventListener('resize', updateHeight)
     return () => vv.removeEventListener('resize', updateHeight)
@@ -306,26 +307,29 @@ export default function ChatPage() {
   const cityName = loc ? [loc.city, loc.district].filter(Boolean).join(' ') || loc.city : ''
 
   return (
-    <div className="flex flex-col bg-gradient-to-br from-[#0a0e14] via-[#0f141a] to-[#0a0e14] pb-20" style={{ height: appHeight }}>
+    <div className={`flex flex-col bg-gradient-to-br from-[#0a0e14] via-[#0f141a] to-[#0a0e14] `} style={{ height: appHeight, paddingBottom: keyboardOpen ? 0 : 'calc(5rem + env(safe-area-inset-bottom, 0px))' }}>
       {/* Header */}
       <header className="flex-shrink-0 bg-[#0a0e14]/80 backdrop-blur-xl z-50 shadow-[0_4px_30px_rgba(0,0,0,0.1)]">
-        <div className="flex justify-between items-center px-6 h-16 w-full">
-          <div className="flex items-center gap-3">
+        <div className="flex justify-between items-center px-5 h-14 w-full">
+          <div className="flex items-center gap-2.5">
             <span className="material-symbols-outlined text-[var(--primary)]" style={{ fontVariationSettings: "'FILL' 1" }}>auto_awesome</span>
-            <h1 className="text-xl font-black tracking-tighter text-[var(--primary)]" style={{ filter: 'drop-shadow(0 0 15px rgba(182,160,255,0.3))' }}>{t('app.title')}</h1>
+            <h1 className="text-lg font-black tracking-tighter text-[var(--primary)]" style={{ filter: 'drop-shadow(0 0 15px rgba(182,160,255,0.3))' }}>{t('app.title')}</h1>
           </div>
           <div className="flex items-center gap-2">
             <LanguageSwitcher />
             {cityName && (
-              <div className="flex items-center gap-1 text-slate-400 text-sm">
-                <span className="material-symbols-outlined text-sm">location_on</span>
-                <span className="font-bold">{cityName}</span>
-              </div>
+              <button
+                onClick={() => requestLocation()}
+                className="w-8 h-8 rounded-full grid place-items-center text-[var(--muted)] hover:bg-white/10 transition-colors"
+                title={cityName}
+              >
+                <span className="material-symbols-outlined text-[18px]">location_on</span>
+              </button>
             )}
             {inChat && (
               <button
                 onClick={() => { setMessages([]); try { sessionStorage.removeItem(SESSION_CHAT_KEY) } catch { /* ignore */ } }}
-                className="w-8 h-8 rounded-full grid place-items-center text-[var(--muted)] text-sm hover:bg-white/10 transition-colors"
+                className="w-8 h-8 rounded-full grid place-items-center text-[var(--muted)] hover:bg-white/10 transition-colors"
               >
                 <span className="material-symbols-outlined text-[18px]">close</span>
               </button>
@@ -358,7 +362,7 @@ export default function ChatPage() {
         </>
       )}
 
-      <BottomNav />
+      {!keyboardOpen && <BottomNav />}
     </div>
   )
 }
