@@ -105,6 +105,8 @@
     "browser_no_geo": "El navegador no soporta geolocalización",
     "search_fail": "Búsqueda fallida, intenta más tarde",
     "no_result": "No se encontraron restaurantes cerca",
+    "loading_more": "Cargando más...",
+    "no_more": "Todos los restaurantes cargados",
     "no_result_hint": "Amplía el área de búsqueda o cambia las palabras clave",
     "nearby_count": "{{count}} restaurantes cerca",
     "searching": "Buscando...",

@@ -105,6 +105,8 @@
     "browser_no_geo": "Browser does not support geolocation",
     "search_fail": "Search failed, try again later",
     "no_result": "No restaurants found nearby",
+    "loading_more": "Loading more...",
+    "no_more": "All restaurants loaded",
     "no_result_hint": "Try expanding search area or different keywords",
     "nearby_count": "{{count}} restaurants nearby",
     "searching": "Searching...",

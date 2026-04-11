@@ -105,6 +105,8 @@
     "browser_no_geo": "浏览器不支持定位",
     "search_fail": "搜索失败，请稍后重试",
     "no_result": "附近没有找到餐厅",
+    "loading_more": "加载更多...",
+    "no_more": "已加载全部餐厅",
     "no_result_hint": "试试扩大搜索范围或换个关键词",
     "nearby_count": "附近 {{count}} 家餐厅",
     "searching": "搜索中...",

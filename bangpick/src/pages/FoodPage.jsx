@@ -23,6 +23,9 @@ export default function FoodPage() {
   const [recommendations, setRecommendations] = useState(null)
   const [recLoading, setRecLoading] = useState(false)
   const [recQuery, setRecQuery] = useState('')
+  const [searchRadius, setSearchRadius] = useState(1500)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
   const listRef = useRef(null)
   const [appHeight, setAppHeight] = useState('100%')
   const [keyboardOpen, setKeyboardOpen] = useState(false)
@@ -84,26 +87,47 @@ export default function FoodPage() {
     )
   }, [])
 
-  const doSearch = useCallback(async (pos, keyword) => {
+  const doSearch = useCallback(async (pos, keyword, loadMore = false) => {
     if (!pos) return
-    setLoading(true)
-    setError(null)
+    const radius = loadMore ? searchRadius * 2 : 1500
+    if (loadMore) {
+      setLoadingMore(true)
+    } else {
+      setLoading(true)
+      setError(null)
+      setSearchRadius(1500)
+      setHasMore(true)
+    }
     try {
       const results = await searchNearbyFood({
         lat: pos.lat,
         lon: pos.lng,
-        radius: 1500,
+        radius,
         keyword: keyword || undefined,
         language: i18n.language,
       })
-      setRestaurants(results)
+      if (loadMore) {
+        const existingIds = new Set(restaurants.map(r => r.placeId))
+        const newResults = results.filter(r => !existingIds.has(r.placeId))
+        if (newResults.length === 0) {
+          setHasMore(false)
+        } else {
+          setRestaurants(prev => [...prev, ...newResults])
+          setSearchRadius(radius)
+        }
+        // Stop expanding beyond 10km
+        if (radius >= 10000) setHasMore(false)
+      } else {
+        setRestaurants(results)
+      }
     } catch (err) {
       console.error('[food] search error:', err)
-      setError(t('food.search_fail'))
+      if (!loadMore) setError(t('food.search_fail'))
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
-  }, [t])
+  }, [t, searchRadius, restaurants])
 
   useEffect(() => {
     if (!userPos) return
@@ -177,7 +201,12 @@ export default function FoodPage() {
       <div className="mx-5 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(245,158,11,0.15), transparent)' }} />
 
       {/* Main content */}
-      <div ref={listRef} className="flex-1 overflow-y-auto pt-3 pb-2 min-h-0">
+      <div ref={listRef} className="flex-1 overflow-y-auto pt-3 pb-2 min-h-0" onScroll={(e) => {
+        const el = e.currentTarget
+        if (el.scrollHeight - el.scrollTop - el.clientHeight < 200 && !loading && !loadingMore && hasMore && restaurants.length > 0 && !recommendations) {
+          doSearch(userPos, searchKeyword, true)
+        }
+      }}>
         {/* Loading state */}
         {loading && (
           <div className="flex flex-col items-center justify-center min-h-full">
@@ -305,7 +334,7 @@ export default function FoodPage() {
                 </div>
                 <div className="flex flex-col gap-2">
                   {restaurants.map((r, i) => (
-                    <div key={r.placeId} style={{ animation: `foodSlideUp 0.35s ease-out ${i * 40}ms both` }}>
+                    <div key={r.placeId} style={{ animation: i < 20 ? `foodSlideUp 0.35s ease-out ${i * 40}ms both` : undefined }}>
                       <RestaurantCard
                         restaurant={r}
                         selected={selectedId === r.placeId}
@@ -315,6 +344,17 @@ export default function FoodPage() {
                     </div>
                   ))}
                 </div>
+                {loadingMore && (
+                  <div className="flex items-center justify-center gap-2 py-6">
+                    <div className="w-4 h-4 rounded-full animate-spin" style={{ border: '2px solid transparent', borderTopColor: '#b6a0ff' }} />
+                    <span className="text-[11px]" style={{ color: '#52555c' }}>{t('food.loading_more') || '加载更多...'}</span>
+                  </div>
+                )}
+                {!hasMore && restaurants.length > 0 && !loadingMore && (
+                  <div className="text-center py-4">
+                    <span className="text-[10px]" style={{ color: '#3a3d44' }}>{t('food.no_more') || '已加载全部餐厅'}</span>
+                  </div>
+                )}
               </>
             )}
           </div>
