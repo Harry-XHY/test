@@ -6,13 +6,30 @@ import RestaurantCard from '../components/RestaurantCard'
 import RestaurantDetail from '../components/RestaurantDetail'
 import RecommendationCard from '../components/RecommendationCard'
 import ChatInput from '../components/ChatInput'
-import { searchNearbyFood, getFoodDetail, getRecommendations } from '../lib/foodApi'
+import { searchNearbyFood, getFoodDetail, getRecommendations, parseIntent } from '../lib/foodApi'
 import { detectCountry, detectCountryFromLang, getCountryConfig } from '../lib/countryConfig'
-import { getDietaryProfile, isProfileActive } from '../lib/dietaryProfile'
-import DietaryProfileModal from '../components/DietaryProfileModal'
-import FoodVoteModal from '../components/FoodVoteModal'
-import { createFoodVote } from '../lib/foodVote'
-import { useNavigate } from 'react-router-dom'
+
+function detectOffTopicLocally(text) {
+  const normalized = String(text || '').trim().toLowerCase()
+  if (!normalized) return false
+  const foodHints = ['吃', '餐', '饭', '店', '美食', '口味', '菜', '拉面', '火锅', '烧烤', '寿司', '咖啡', '甜品', '预算', '聚餐', '约会', 'restaurant', 'food', 'eat', 'dinner', 'lunch', 'breakfast', 'ramen', 'sushi', 'bbq', 'cafe', 'dessert']
+  if (foodHints.some(term => normalized.includes(term))) return false
+  const assistantMetaPatterns = [
+    /你是.{0,6}(模型|助手|ai|机器人)/,
+    /你是什么/,
+    /你是谁/,
+    /你能干嘛/,
+    /你会什么/,
+    /介绍一下你自己/,
+    /what are you/,
+    /who are you/,
+    /what model/,
+    /what can you do/
+  ]
+  if (assistantMetaPatterns.some(pattern => pattern.test(normalized))) return true
+  const offTopicHints = ['周报', '日报', '代码', '编程', 'bug', '股票', '基金', '天气', '新闻', '翻译', 'ppt', '简历', '面试', '写邮件', 'write report', 'code', 'bug', 'stock', 'weather', 'translate', 'resume', 'email']
+  return offTopicHints.some(term => normalized.includes(term))
+}
 
 export default function FoodPage() {
   const { t, i18n } = useTranslation()
@@ -26,22 +43,16 @@ export default function FoodPage() {
   const [searchKeyword, setSearchKeyword] = useState('')
   const [countryCode, setCountryCode] = useState(null)
   const [recommendations, setRecommendations] = useState(null)
+  const [intentLoading, setIntentLoading] = useState(false)
   const [recLoading, setRecLoading] = useState(false)
   const [recQuery, setRecQuery] = useState('')
+  const [intentFeedback, setIntentFeedback] = useState(null)
   const [searchRadius, setSearchRadius] = useState(1500)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(true)
   const listRef = useRef(null)
   const [appHeight, setAppHeight] = useState('100%')
   const [keyboardOpen, setKeyboardOpen] = useState(false)
-  const [showDietaryModal, setShowDietaryModal] = useState(false)
-  const [dietaryProfile, setDietaryProfile] = useState(null)
-  const [showVoteModal, setShowVoteModal] = useState(false)
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    setDietaryProfile(getDietaryProfile())
-  }, [])
 
   useEffect(() => {
     const vv = window.visualViewport
@@ -105,15 +116,15 @@ export default function FoodPage() {
   restaurantsRef.current = restaurants
   searchRadiusRef.current = searchRadius
 
-  const doSearch = useCallback(async (pos, keyword, loadMore = false) => {
-    if (!pos) return
-    const radius = loadMore ? searchRadiusRef.current * 2 : 1500
+  const doSearch = useCallback(async (pos, keyword, loadMore = false, options = {}) => {
+    if (!pos) return []
+    const radius = loadMore ? searchRadiusRef.current * 2 : (options.radius || 1500)
     if (loadMore) {
       setLoadingMore(true)
     } else {
       setLoading(true)
       setError(null)
-      setSearchRadius(1500)
+      setSearchRadius(radius)
       setHasMore(true)
     }
     try {
@@ -122,6 +133,7 @@ export default function FoodPage() {
         lon: pos.lng,
         radius,
         keyword: keyword || undefined,
+        type: options.cuisine || undefined,
         language: i18n.language,
       })
       if (loadMore) {
@@ -137,14 +149,16 @@ export default function FoodPage() {
       } else {
         setRestaurants(results)
       }
+      return results
     } catch (err) {
       console.error('[food] search error:', err)
       if (!loadMore) setError(t('food.search_fail'))
+      return []
     } finally {
       setLoading(false)
       setLoadingMore(false)
     }
-  }, [t])
+  }, [t, i18n.language])
 
   useEffect(() => {
     if (!userPos) return
@@ -169,15 +183,100 @@ export default function FoodPage() {
     }
   }
 
+  async function runFoodFlow(text) {
+    setSearchKeyword(text)
+    setRecQuery(text)
+    setIntentFeedback(null)
+    if (!userPos) return
+
+    if (detectOffTopicLocally(text)) {
+      setIntentLoading(false)
+      setIntentFeedback({
+        title: t('food.off_topic_title'),
+        reply: t('food.off_topic_desc'),
+        suggestions: [
+          t('food.off_topic_suggestion_0'),
+          t('food.off_topic_suggestion_1'),
+          t('food.off_topic_suggestion_2'),
+        ].filter(Boolean),
+      })
+      return
+    }
+
+    setIntentLoading(true)
+    setRecommendations(null)
+    let intent
+    try {
+      intent = await parseIntent(text, i18n.language, countryCode)
+    } catch (err) {
+      console.error('[food] parse intent error:', err)
+      intent = { type: 'food_search', keyword: text, cuisine: null, radius: null, reply: '', suggestions: [] }
+    } finally {
+      setIntentLoading(false)
+    }
+
+    if (intent?.type === 'off_topic') {
+      setRecQuery(text)
+      setIntentFeedback({
+        title: t('food.off_topic_title'),
+        reply: intent.reply || t('food.off_topic_desc'),
+        suggestions: Array.isArray(intent.suggestions) && intent.suggestions.length > 0
+          ? intent.suggestions
+          : [
+              t('food.off_topic_suggestion_0'),
+              t('food.off_topic_suggestion_1'),
+              t('food.off_topic_suggestion_2'),
+            ].filter(Boolean),
+      })
+      return
+    }
+
+    const resolvedQuery = intent?.keyword || text
+    const resolvedCuisine = intent?.cuisine || undefined
+    const resolvedRadius = intent?.radius || undefined
+    setSearchKeyword(resolvedQuery)
+    setRecQuery(resolvedQuery)
+    setRecLoading(true)
+    try {
+      let nearbyList = restaurants
+      if (nearbyList.length === 0 || resolvedCuisine || resolvedRadius || resolvedQuery !== text) {
+        nearbyList = await searchNearbyFood({
+          lat: userPos.lat,
+          lon: userPos.lng,
+          radius: resolvedRadius || 1500,
+          keyword: resolvedQuery,
+          type: resolvedCuisine,
+          language: i18n.language,
+        })
+        setRestaurants(nearbyList)
+      }
+      const trimmed = nearbyList.slice(0, 10).map(r => ({
+        placeId: r.placeId, name: r.name, cuisine: r.cuisine || r.types?.slice(0, 2).join(',') || '',
+        distance: r.distance, rating: r.rating, location: r.location, photos: r.photos?.slice(0, 1), source: r.source,
+      }))
+      const recs = await getRecommendations({
+        query: resolvedQuery,
+        restaurants: trimmed,
+        lang: i18n.language,
+        country: countryCode,
+        currency: config.currency,
+      })
+      setRecommendations(Array.isArray(recs) ? recs : [])
+    } catch (err) {
+      console.error('[food] recommend error:', err)
+      setRecommendations([])
+    } finally {
+      setRecLoading(false)
+    }
+  }
+
   return (
     <div className="flex flex-col bg-[#080b10]" style={{ height: appHeight }}>
-      {/* Ambient glow */}
       <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] pointer-events-none" style={{
         background: 'radial-gradient(ellipse at center, rgba(245,158,11,0.06) 0%, rgba(245,158,11,0.02) 40%, transparent 70%)',
         filter: 'blur(40px)',
       }} />
 
-      {/* Header */}
       <header className="flex-shrink-0 relative px-5 pt-[max(env(safe-area-inset-top),12px)] pb-3">
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-3">
@@ -201,26 +300,6 @@ export default function FoodPage() {
           </div>
           <div className="flex items-center gap-1.5">
             <LanguageSwitcher />
-            <button
-              onClick={() => setShowDietaryModal(true)}
-              className="w-8 h-8 rounded-lg grid place-items-center hover:bg-white/5 transition-colors relative"
-              style={{ color: '#52555c', border: '1px solid rgba(255,255,255,0.06)' }}
-            >
-              <span className="material-symbols-outlined text-[16px]">settings</span>
-              {isProfileActive(dietaryProfile) && (
-                <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-emerald-400" />
-              )}
-            </button>
-            {userPos && restaurants.length > 0 && (
-              <button
-                onClick={() => setShowVoteModal(true)}
-                className="w-8 h-8 rounded-lg grid place-items-center hover:bg-white/5 transition-colors"
-                style={{ color: '#52555c', border: '1px solid rgba(255,255,255,0.06)' }}
-                title={t('foodVote.btn')}
-              >
-                <span className="material-symbols-outlined text-[16px]">group</span>
-              </button>
-            )}
             {userPos && (
               <button
                 onClick={() => doSearch(userPos, '')}
@@ -234,17 +313,14 @@ export default function FoodPage() {
         </div>
       </header>
 
-      {/* Divider */}
       <div className="mx-5 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(245,158,11,0.15), transparent)' }} />
 
-      {/* Main content */}
       <div ref={listRef} className="flex-1 overflow-y-auto pt-3 pb-2 min-h-0" onScroll={(e) => {
         const el = e.currentTarget
-        if (el.scrollHeight - el.scrollTop - el.clientHeight < 200 && !loading && !loadingMore && hasMore && restaurants.length > 0 && !recommendations) {
+        if (el.scrollHeight - el.scrollTop - el.clientHeight < 200 && !loading && !loadingMore && hasMore && restaurants.length > 0 && !recommendations && !intentFeedback) {
           doSearch(userPos, searchKeyword, true)
         }
       }}>
-        {/* Loading state */}
         {loading && (
           <div className="flex flex-col items-center justify-center min-h-full">
             <div className="relative w-14 h-14 mb-4">
@@ -265,8 +341,22 @@ export default function FoodPage() {
           </div>
         )}
 
-        {/* AI Recommendation loading */}
-        {recLoading && (
+        {intentLoading && (
+          <div className="px-5 py-16 flex flex-col items-center">
+            <div className="relative w-16 h-16 mb-5">
+              <div className="absolute inset-0 rounded-2xl animate-ping" style={{ background: 'rgba(91,140,255,0.1)', animationDuration: '2s' }} />
+              <div className="absolute inset-0 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(91,140,255,0.08)', border: '1px solid rgba(91,140,255,0.15)' }}>
+                <span className="material-symbols-outlined text-2xl" style={{ color: '#5B8CFF', fontVariationSettings: "'FILL' 1" }}>psychology</span>
+              </div>
+            </div>
+            <p className="text-[13px] font-medium" style={{ color: '#a8abb3' }}>{t('food.intent_thinking')}</p>
+            <p className="text-[11px] mt-2 px-6 text-center" style={{ color: '#3a3d44' }}>
+              {t('food.intent_hint')}
+            </p>
+          </div>
+        )}
+
+        {recLoading && !intentLoading && (
           <div className="px-5 py-16 flex flex-col items-center">
             <div className="relative w-16 h-16 mb-5">
               <div className="absolute inset-0 rounded-2xl animate-ping" style={{ background: 'rgba(245,158,11,0.1)', animationDuration: '2s' }} />
@@ -275,12 +365,39 @@ export default function FoodPage() {
               </div>
             </div>
             <p className="text-[13px] font-medium" style={{ color: '#a8abb3' }}>{t('food.ai_thinking')}</p>
-            <p className="text-[11px] mt-2 px-6 text-center" style={{ color: '#3a3d44' }}>"{recQuery}"</p>
+            <p className="text-[11px] mt-2 px-6 text-center" style={{ color: '#3a3d44' }}>
+              "{recQuery}"
+            </p>
           </div>
         )}
 
-        {/* AI Recommendations */}
-        {!recLoading && recommendations && (
+        {!intentLoading && !recLoading && intentFeedback && (
+          <div className="px-5 py-10">
+            <div className="rounded-2xl p-5 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div className="w-14 h-14 rounded-2xl mx-auto mb-4 flex items-center justify-center" style={{ background: 'rgba(91,140,255,0.08)', border: '1px solid rgba(91,140,255,0.16)' }}>
+                <span className="material-symbols-outlined text-xl" style={{ color: '#5B8CFF' }}>tips_and_updates</span>
+              </div>
+              <p className="text-[13px] font-semibold mb-2" style={{ color: '#f1f3fc' }}>{intentFeedback.title}</p>
+              <p className="text-[11px] leading-relaxed max-w-xs mx-auto" style={{ color: '#72757d' }}>{intentFeedback.reply}</p>
+              {intentFeedback.suggestions?.length > 0 && (
+                <div className="flex flex-wrap justify-center gap-2 mt-5">
+                  {intentFeedback.suggestions.map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      onClick={() => runFoodFlow(suggestion)}
+                      className="px-3 py-2 rounded-full text-[11px] transition-colors hover:bg-white/8"
+                      style={{ background: 'rgba(255,255,255,0.04)', color: '#a8abb3', border: '1px solid rgba(255,255,255,0.06)' }}
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {!intentLoading && !recLoading && recommendations && (
           <div className="px-5">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2.5">
@@ -290,7 +407,7 @@ export default function FoodPage() {
                 <span className="text-[12px] font-bold tracking-wide uppercase" style={{ color: '#72757d' }}>{t('food.ai_picks')}</span>
               </div>
               <button
-                onClick={() => { setRecommendations(null); setRecQuery('') }}
+                onClick={() => { setRecommendations(null); setRecQuery(''); setIntentFeedback(null) }}
                 className="text-[10px] font-medium px-2.5 py-1 rounded-md transition-colors hover:bg-white/5"
                 style={{ color: '#52555c', border: '1px solid rgba(255,255,255,0.06)' }}
               >
@@ -302,7 +419,9 @@ export default function FoodPage() {
                 background: 'rgba(245,158,11,0.04)',
                 borderLeft: '2px solid rgba(245,158,11,0.3)',
               }}>
-                <p className="text-[11px] italic" style={{ color: '#a8abb3' }}>"{recQuery}"</p>
+                <p className="text-[11px] italic" style={{ color: '#a8abb3' }}>
+                  "{recQuery}"
+                </p>
               </div>
             )}
             {recommendations.length === 0 ? (
@@ -331,8 +450,7 @@ export default function FoodPage() {
           </div>
         )}
 
-        {/* Default browse mode */}
-        {!loading && !recLoading && !recommendations && (
+        {!loading && !intentLoading && !recLoading && !recommendations && !intentFeedback && (
           <div className="px-5">
             {error && (
               <div className="text-center py-12">
@@ -398,58 +516,7 @@ export default function FoodPage() {
         )}
       </div>
 
-      <DietaryProfileModal
-        isOpen={showDietaryModal}
-        onClose={() => {
-          setShowDietaryModal(false)
-          setDietaryProfile(getDietaryProfile())
-        }}
-      />
-
-      <FoodVoteModal
-        isOpen={showVoteModal}
-        restaurants={restaurants}
-        onClose={() => setShowVoteModal(false)}
-        onCreate={({ restaurants, deadlineMinutes, question }) => {
-          const session = createFoodVote({ restaurants, deadlineMinutes, question })
-          setShowVoteModal(false)
-          navigate(`/food-vote/${session.id}`)
-        }}
-      />
-
-      <ChatInput onSend={async (text) => {
-        setSearchKeyword(text)
-        setRecQuery(text)
-        if (!userPos) return
-        setRecLoading(true)
-        setRecommendations(null)
-        try {
-          let nearbyList = restaurants
-          if (nearbyList.length === 0) {
-            nearbyList = await searchNearbyFood({ lat: userPos.lat, lon: userPos.lng, radius: 1500, language: i18n.language })
-            setRestaurants(nearbyList)
-          }
-          // Only send top 10 restaurants with minimal fields (server ignores the rest)
-          const trimmed = nearbyList.slice(0, 10).map(r => ({
-            placeId: r.placeId, name: r.name, cuisine: r.cuisine || r.types?.slice(0, 2).join(',') || '',
-            distance: r.distance, rating: r.rating, location: r.location, photos: r.photos?.slice(0, 1), source: r.source,
-          }))
-          const recs = await getRecommendations({
-            query: text,
-            restaurants: trimmed,
-            lang: i18n.language,
-            country: countryCode,
-            currency: config.currency,
-            dietaryProfile,
-          })
-          setRecommendations(Array.isArray(recs) ? recs : [])
-        } catch (err) {
-          console.error('[food] recommend error:', err)
-          setRecommendations([])
-        } finally {
-          setRecLoading(false)
-        }
-      }} />
+      <ChatInput onSend={runFoodFlow} />
 
       {!keyboardOpen && <div className="flex-shrink-0 h-16" />}
       {!keyboardOpen && <BottomNav />}

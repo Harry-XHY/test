@@ -1,11 +1,11 @@
-export async function searchNearbyFood({ lat, lon, radius, keyword, type, language }) {
+export async function searchNearbyFood({ lat, lon, radius, keyword, type, language, dietaryProfile }) {
   // Retry once on failure (Overpass can be flaky)
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const r = await fetch('/api/food', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'search', lat, lon, radius: radius || 1500, keyword, type, language }),
+        body: JSON.stringify({ action: 'search', lat, lon, radius: radius || 1500, keyword, type, language, dietaryProfile }),
       })
       if (r.ok) return r.json()
       if (attempt === 0 && r.status >= 500) {
@@ -63,6 +63,6 @@ export async function parseIntent(text, lang, country) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action: 'parse-intent', text, lang, country }),
   })
-  if (!r.ok) return { keyword: text }
+  if (!r.ok) return { type: 'food_search', keyword: text, cuisine: null, radius: null, reply: '', suggestions: [] }
   return r.json()
 }

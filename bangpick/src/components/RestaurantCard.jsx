@@ -23,6 +23,7 @@ export default function RestaurantCard({ restaurant: r, selected, onClick, count
     .map(tag => ({ raw: tag, label: translateTag(tag, t) }))
     .filter(item => item.label)
     .slice(0, 3)
+  const showDietaryBadge = r.dietaryFit?.status === 'match'
 
   // Show image if restaurant has real photos (Google Places or Foursquare)
   const hasRealPhoto = r.photos && r.photos.length > 0 && (r.source === 'google' || r.source === 'foursquare')
@@ -60,6 +61,12 @@ export default function RestaurantCard({ restaurant: r, selected, onClick, count
           )}
         </div>
         <div className="flex items-center gap-1.5 flex-wrap">
+          {showDietaryBadge && (
+            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded"
+              style={{ background: 'rgba(34,197,94,0.1)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.18)' }}>
+              {t('dietary.match_badge')}
+            </span>
+          )}
           {cuisineTags.map((item, i) => (
             <span key={i} className="text-[9px] font-medium px-1.5 py-0.5 rounded"
               style={{ background: 'rgba(255,255,255,0.04)', color: '#72757d' }}>

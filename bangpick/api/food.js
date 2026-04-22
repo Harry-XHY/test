@@ -3,6 +3,7 @@
 
 import { chatComplete } from './_aiProvider.js'
 import { getRedis } from './_redis.js'
+import { evaluateRestaurantDietaryFit, isProfileActive, buildDietaryPromptFragment } from '../src/lib/dietaryProfile.js'
 
 const VOTE_TTL_SEC = 60 * 60 * 24 * 7 // 7 days
 
@@ -15,6 +16,23 @@ const GOOGLE_KEY = process.env.GOOGLE_PLACES_API_KEY || ''
 const FOURSQUARE_KEY = process.env.FOURSQUARE_API_KEY || ''
 const PEXELS_KEY = process.env.PEXELS_API_KEY || ''
 
+function isAssistantMetaQuestion(text) {
+  const normalized = String(text || '').trim().toLowerCase()
+  if (!normalized) return false
+  return [
+    /你是.{0,6}(模型|助手|ai|机器人)/,
+    /你是什么/,
+    /你是谁/,
+    /你能干嘛/,
+    /你会什么/,
+    /介绍一下你自己/,
+    /what are you/,
+    /who are you/,
+    /what model/,
+    /what can you do/
+  ].some(pattern => pattern.test(normalized))
+}
+
 function haversine(lat1, lon1, lat2, lon2) {
   const R = 6371000
   const toRad = (d) => (d * Math.PI) / 180
@@ -24,6 +42,88 @@ function haversine(lat1, lon1, lat2, lon2) {
     Math.sin(dLat / 2) ** 2 +
     Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+function isPrivateHost(hostname) {
+  return hostname === 'localhost' || hostname === '127.0.0.1' ||
+    hostname.startsWith('10.') || hostname.startsWith('192.168.') || /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname)
+}
+
+function shouldUseLocalMockFallback(req) {
+  const host = String(req?.headers?.host || '').split(':')[0]
+  return isPrivateHost(host)
+}
+
+function offsetLatLng(lat, lon, distanceMeters, bearingDeg) {
+  const earthRadius = 6378137
+  const bearing = bearingDeg * Math.PI / 180
+  const latRad = lat * Math.PI / 180
+  const lonRad = lon * Math.PI / 180
+  const nextLat = Math.asin(
+    Math.sin(latRad) * Math.cos(distanceMeters / earthRadius) +
+    Math.cos(latRad) * Math.sin(distanceMeters / earthRadius) * Math.cos(bearing)
+  )
+  const nextLon = lonRad + Math.atan2(
+    Math.sin(bearing) * Math.sin(distanceMeters / earthRadius) * Math.cos(latRad),
+    Math.cos(distanceMeters / earthRadius) - Math.sin(latRad) * Math.sin(nextLat)
+  )
+  return {
+    lat: +(nextLat * 180 / Math.PI).toFixed(6),
+    lng: +(nextLon * 180 / Math.PI).toFixed(6),
+  }
+}
+
+const LOCAL_MOCK_RESTAURANTS = [
+  { zhName: '绿碗纯素厨房', enName: 'Green Bowl Vegan Kitchen', cuisine: 'vegan;salad', types: ['restaurant', 'vegan_restaurant', 'salad'], vicinity: '创意园 A 座', distance: 220, bearing: 15, rating: 4.7, priceLevel: 2, openingHours: '10:00-21:30' },
+  { zhName: '每日素食小馆', enName: 'Daily Veggie Bistro', cuisine: 'vegetarian;cafe', types: ['restaurant', 'vegetarian_restaurant', 'cafe'], vicinity: '北门街角', distance: 360, bearing: 68, rating: 4.5, priceLevel: 1, openingHours: '09:30-20:30' },
+  { zhName: '清真兰州牛肉面', enName: 'Halal Lanzhou Noodles', cuisine: 'halal;noodle', types: ['restaurant', 'halal_restaurant', 'noodle'], vicinity: '地铁口旁', distance: 430, bearing: 120, rating: 4.6, priceLevel: 1, openingHours: '08:00-22:00' },
+  { zhName: '轻食能量碗', enName: 'Power Bowl Lab', cuisine: 'gluten_free;healthy', types: ['restaurant', 'gluten_free_restaurant', 'healthy_food'], vicinity: '联合办公楼下', distance: 520, bearing: 200, rating: 4.4, priceLevel: 2, openingHours: '11:00-20:30' },
+  { zhName: '平价饺子铺', enName: 'Budget Dumpling Corner', cuisine: 'dumpling;chinese', types: ['restaurant', 'dumpling', 'chinese_restaurant'], vicinity: '社区南门', distance: 610, bearing: 250, rating: 4.3, priceLevel: 0, openingHours: '10:30-21:00' },
+  { zhName: '花园早午餐', enName: 'Garden Brunch Cafe', cuisine: 'brunch;cafe', types: ['restaurant', 'brunch_restaurant', 'cafe'], vicinity: '河边步道', distance: 760, bearing: 300, rating: 4.5, priceLevel: 2, openingHours: '08:30-18:00' },
+  { zhName: '京都寿司吧', enName: 'Kyoto Sushi Bar', cuisine: 'sushi;japanese', types: ['restaurant', 'sushi_restaurant', 'japanese_restaurant'], vicinity: '广场东侧', distance: 920, bearing: 335, rating: 4.6, priceLevel: 3, openingHours: '11:00-22:00' },
+  { zhName: '老街麻辣火锅', enName: 'Old Street Hotpot', cuisine: 'hotpot;sichuan', types: ['restaurant', 'hotpot', 'sichuan_restaurant'], vicinity: '商场 5 层', distance: 1080, bearing: 28, rating: 4.7, priceLevel: 3, openingHours: '11:00-23:00' },
+  { zhName: '港湾海鲜烧烤', enName: 'Harbor Seafood Grill', cuisine: 'seafood;bbq', types: ['restaurant', 'seafood_restaurant', 'bbq'], vicinity: '湖景路 18 号', distance: 1280, bearing: 85, rating: 4.2, priceLevel: 3, openingHours: '17:00-23:30' },
+  { zhName: '小麦工坊', enName: 'Wheat House Bakery', cuisine: 'bak;pastry', types: ['bakery', 'pastry_shop'], vicinity: '写字楼一层', distance: 1490, bearing: 145, rating: 4.1, priceLevel: 1, openingHours: '07:30-20:00' },
+  { zhName: '意面实验室', enName: 'Pasta Atelier', cuisine: 'italian;pasta', types: ['restaurant', 'italian_restaurant', 'pasta_shop'], vicinity: '艺术区西门', distance: 1820, bearing: 210, rating: 4.4, priceLevel: 3, openingHours: '11:30-22:00' },
+  { zhName: '湘辣食堂', enName: 'Spice Route Hunan', cuisine: 'hunan;spicy', types: ['restaurant', 'hunan_restaurant', 'spicy'], vicinity: '体育馆北侧', distance: 2240, bearing: 260, rating: 4.3, priceLevel: 2, openingHours: '11:00-21:30' },
+  { zhName: '匠人牛排馆', enName: 'Craft Steakhouse', cuisine: 'steak;grill', types: ['restaurant', 'steakhouse', 'grill'], vicinity: '金融街中段', distance: 2680, bearing: 315, rating: 4.8, priceLevel: 4, openingHours: '17:30-22:30' },
+  { zhName: '夜市烤串', enName: 'Night Market Yakitori', cuisine: 'bbq;yakitori', types: ['restaurant', 'bbq', 'yakitori'], vicinity: '夜市牌坊内', distance: 3120, bearing: 350, rating: 4.0, priceLevel: 1, openingHours: '18:00-01:00' },
+]
+
+function buildLocalMockSearchResults({ lat, lon, radius, keyword, type, language }) {
+  const limitDistance = Math.max(Number(radius) || 1500, 300)
+  const isZh = !language || language.startsWith('zh')
+  const mapped = LOCAL_MOCK_RESTAURANTS.map((item, index) => {
+    const location = offsetLatLng(lat, lon, item.distance, item.bearing)
+    return {
+      placeId: `osm_local_mock_${index + 1}`,
+      name: isZh ? item.zhName : item.enName,
+      rating: item.rating,
+      userRatingsTotal: 40 + index * 17,
+      priceLevel: item.priceLevel,
+      types: item.types,
+      location,
+      vicinity: item.vicinity,
+      phone: null,
+      website: null,
+      openingHours: item.openingHours,
+      cuisine: item.cuisine,
+      photos: [],
+      distance: item.distance,
+      source: 'osm',
+    }
+  })
+
+  const query = String(keyword || type || '').trim().toLowerCase()
+  const inRadius = mapped.filter(item => item.distance <= limitDistance)
+  const base = inRadius.length > 0 ? inRadius : mapped
+  if (!query) return base.slice(0, 20)
+
+  const filtered = base.filter(item => {
+    const haystack = [item.name, item.cuisine, item.vicinity, ...(item.types || [])].join(' | ').toLowerCase()
+    return haystack.includes(query)
+  })
+  return (filtered.length > 0 ? filtered : base).slice(0, 20)
 }
 
 // ── Search: Google Places (New) ──
@@ -350,6 +450,11 @@ export default async function handler(req, res) {
       const url = new URL(req.url, `http://${req.headers.host}`)
       const action = url.searchParams.get('action')
 
+      if (action === 'test') {
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        return res.end(JSON.stringify({ ok: true, time: Date.now() }))
+      }
+
       // Google Places (New) photo proxy — ref is "places/xxx/photos/yyy"
       if (action === 'photo') {
         const ref = url.searchParams.get('ref')
@@ -392,7 +497,7 @@ export default async function handler(req, res) {
     const { action, ...params } = req.body || {}
 
     if (action === 'search') {
-      const { lat, lon } = params
+      const { lat, lon, dietaryProfile } = params
       if (!lat || !lon) { res.writeHead(400, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ error: 'lat and lon required' })) }
       let results = []
       let anyBackendSucceeded = false
@@ -411,18 +516,37 @@ export default async function handler(req, res) {
           console.error('[food] search backend error:', err.message)
         }
       }
+      if ((!anyBackendSucceeded || !results || results.length === 0) && shouldUseLocalMockFallback(req)) {
+        console.warn('[food] using local mock fallback for search')
+        results = buildLocalMockSearchResults(params)
+        anyBackendSucceeded = true
+      }
       if (!anyBackendSucceeded) {
         res.writeHead(502, { 'Content-Type': 'application/json' })
-        return res.end(JSON.stringify({ error: 'all_backends_failed' }))
-      }
-      // Sort by composite score: distance (40%) + rating (35%) + popularity (25%)
+        return res.end(JSON.stringify({ error: 'all_backends_failed' })) }
+
+      const useDietaryFilter = isProfileActive(dietaryProfile)
+      const withDietaryFit = useDietaryFilter
+        ? (results || []).map(r => ({ ...r, dietaryFit: evaluateRestaurantDietaryFit(dietaryProfile, r) }))
+        : (results || [])
+      const excluded = useDietaryFilter
+        ? withDietaryFit.filter(r => r.dietaryFit?.status === 'exclude')
+        : []
+      const candidateResults = useDietaryFilter
+        ? withDietaryFit.filter(r => r.dietaryFit?.status !== 'exclude')
+        : withDietaryFit
+      results = useDietaryFilter && candidateResults.length >= 5 ? candidateResults : withDietaryFit
+
+      // Sort by composite score: distance (40%) + rating (35%) + popularity (25%) + dietary fit bonus
       if (results && results.length > 1) {
         results.sort((a, b) => {
           const ds = (d) => 1 - Math.min(d || 9999, 2000) / 2000
           const rs = (r) => (r || 3) / 5
           const ps = (p) => Math.min(p || 0, 500) / 500
-          const scoreA = ds(a.distance) * 0.4 + rs(a.rating) * 0.35 + ps(a.userRatingsTotal) * 0.25
-          const scoreB = ds(b.distance) * 0.4 + rs(b.rating) * 0.35 + ps(b.userRatingsTotal) * 0.25
+          const dietaryScore = (item) => item.dietaryFit?.scoreDelta || 0
+          const excludePenalty = (item) => item.dietaryFit?.status === 'exclude' && excluded.length >= withDietaryFit.length - 4 ? -1.2 : 0
+          const scoreA = ds(a.distance) * 0.4 + rs(a.rating) * 0.35 + ps(a.userRatingsTotal) * 0.25 + dietaryScore(a) + excludePenalty(a)
+          const scoreB = ds(b.distance) * 0.4 + rs(b.rating) * 0.35 + ps(b.userRatingsTotal) * 0.25 + dietaryScore(b) + excludePenalty(b)
           return scoreB - scoreA
         })
       }
@@ -459,21 +583,7 @@ export default async function handler(req, res) {
       const cur = currency || '¥'
 
       // Build dietary constraints if provided
-      let dietaryConstraint = ''
-      if (dietaryProfile) {
-        const parts = []
-        if (dietaryProfile.vegetarian) parts.push(isZh ? '用户是素食者，优先推荐有素食选项的餐厅，排除纯肉店/烧烤店。' : 'User is vegetarian. Prioritize restaurants with vegetarian options. Exclude BBQ/steak houses.')
-        if (dietaryProfile.vegan) parts.push(isZh ? '用户是纯素者，只推荐有纯素选项的餐厅。' : 'User is vegan. Only recommend restaurants with clear vegan options.')
-        if (dietaryProfile.halal) parts.push(isZh ? '用户需要清真食品。' : 'User requires halal food.')
-        if (dietaryProfile.glutenFree) parts.push(isZh ? '用户需要无麸质选项。' : 'User needs gluten-free options.')
-        if (dietaryProfile.allergens?.length) parts.push(isZh ? `用户对以下食物过敏，必须排除含有这些食材的菜品：${dietaryProfile.allergens.join('、')}。` : `User is allergic to: ${dietaryProfile.allergens.join(', ')}. Exclude dishes containing these.`)
-        if (dietaryProfile.spiceTolerance === 'none') parts.push(isZh ? '用户完全不能吃辣。' : 'User cannot tolerate spicy food at all.')
-        if (dietaryProfile.spiceTolerance === 'mild') parts.push(isZh ? '用户只能接受微辣。' : 'User prefers mild spice only.')
-        if (dietaryProfile.spiceTolerance === 'hot') parts.push(isZh ? '用户喜欢吃辣，优先推荐辣味餐厅。' : 'User loves spicy food. Prioritize spicy cuisine.')
-        if (dietaryProfile.budgetPreference === 'cheap') parts.push(isZh ? '用户预算有限，优先推荐平价餐厅。' : 'User is budget-conscious. Prioritize inexpensive options.')
-        if (dietaryProfile.budgetPreference === 'expensive') parts.push(isZh ? '用户愿意花更多钱享受美食，可推荐高档餐厅。' : 'User is willing to spend more. High-end recommendations welcome.')
-        dietaryConstraint = parts.join('\n')
-      }
+      const dietaryConstraint = buildDietaryPromptFragment(dietaryProfile, lang)
 
       const basePrompt = isZh
         ? `从附近餐厅列表中选2-3家推荐。返回JSON数组：[{"placeId":"从列表选","name":"店名","reason":"推荐理由15字","dishes":[{"name":"菜名","price":价格,"desc":"15字推荐理由","emoji":"🍖"}],"estimatedTotal":人均,"highlights":["标签"],"matchScore":0-100${dietaryConstraint ? ',"dietaryMatch":"为什么符合用户饮食偏好，15字"' : ''}}]。价格${cur}。只返回JSON。`
@@ -558,13 +668,41 @@ export default async function handler(req, res) {
       const { text, lang, country } = params
       if (!text) { res.writeHead(400, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ error: 'text required' })) }
       const isZh = !lang || lang.startsWith('zh')
+      const fallbackSuggestions = isZh
+        ? ['想吃附近便宜点的拉面', '一个人晚饭吃什么，不要太辣', '附近有什么适合约会的餐厅']
+        : ['Cheap ramen nearby', 'Dinner for one, not too spicy', 'Good nearby restaurant for a date']
+      if (isAssistantMetaQuestion(text)) {
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        return res.end(JSON.stringify({
+          type: 'off_topic',
+          keyword: text,
+          cuisine: null,
+          radius: null,
+          reply: isZh
+            ? '我是美食地图助手，主要帮你找餐厅、推荐吃什么，不负责介绍模型本身。'
+            : 'I’m the food map assistant. I’m here to help with restaurants and what to eat, not model self-introduction.',
+          suggestions: fallbackSuggestions,
+        }))
+      }
       const systemPrompt = isZh
-        ? `你是美食搜索意图解析器。用户会用自然语言描述想吃什么，你需要提取搜索参数。
-返回纯JSON：{"keyword":"搜索关键词","cuisine":"菜系类型(如ramen/sushi/tapas/burger等，可选)","radius":搜索半径米数(默认1500)}
-只返回JSON，不要其他内容。如果无法解析，返回 {"keyword":"原始文本"}`
-        : `You are a food search intent parser. Extract search parameters from the user's natural language input.
-Return pure JSON: {"keyword":"search keyword","cuisine":"cuisine type (e.g. ramen/sushi/tapas/burger, optional)","radius":search radius in meters (default 1500)}
-Return ONLY JSON. If you cannot parse, return {"keyword":"original text"}`
+        ? `你是美食地图页的意图分类器。判断用户输入是否与找餐厅、点餐、吃什么、菜系口味、预算、聚餐场景相关。
+返回纯 JSON，格式为：{"type":"food_search|food_qa|off_topic","keyword":"搜索关键词，可为空","cuisine":"菜系类型，可为空","radius":半径米数，可为空,"reply":"给用户看的简短回复，off_topic 必填，其他可为空","suggestions":["建议问题1","建议问题2"]}
+规则：
+1. 与找餐厅/吃什么/点什么/场景推荐相关，返回 food_search 或 food_qa。
+2. 明显与美食地图无关（如天气、写周报、代码、股票、泛闲聊），返回 off_topic。
+3. 询问你是什么模型、你是谁、你能做什么这类“问助手本身”的问题，也一律返回 off_topic。
+4. off_topic 时不要硬聊原话题，要温和说明你是美食地图助手，并给 2-4 条与找餐厅相关的建议。
+5. food_search / food_qa 时，reply 留空即可；keyword 尽量提炼成适合搜餐厅的短语。
+6. 只返回 JSON，不要 markdown。`
+        : `You are the intent classifier for a food map page. Decide whether the user's message is about finding restaurants, ordering food, what to eat, cuisine preferences, budget, or dining scenarios.
+Return pure JSON in this shape: {"type":"food_search|food_qa|off_topic","keyword":"short search phrase or empty","cuisine":"optional cuisine type","radius":number or null,"reply":"short user-facing reply, required for off_topic","suggestions":["suggestion 1","suggestion 2"]}
+Rules:
+1. Restaurant finding / what to eat / dining recommendation requests => food_search or food_qa.
+2. Clearly unrelated topics (weather, work reports, coding, stocks, generic chat) => off_topic.
+3. Questions about what model you are, who you are, or what you can do are also off_topic.
+4. For off_topic, politely redirect to food-related help and provide 2-4 relevant suggestion prompts.
+5. For food_search / food_qa, reply can be empty; keyword should be concise and search-friendly.
+6. Return JSON only.`
       try {
         const result = await chatComplete({
           system: systemPrompt,
@@ -577,14 +715,34 @@ Return ONLY JSON. If you cannot parse, return {"keyword":"original text"}`
           const m = result.text.match(/\{[\s\S]*\}/)
           if (m) try { parsed = JSON.parse(m[0]) } catch {}
         }
+        const normalized = {
+          type: parsed?.type === 'off_topic' || parsed?.type === 'food_qa' ? parsed.type : 'food_search',
+          keyword: typeof parsed?.keyword === 'string' && parsed.keyword.trim() ? parsed.keyword.trim() : text,
+          cuisine: typeof parsed?.cuisine === 'string' && parsed.cuisine.trim() ? parsed.cuisine.trim() : null,
+          radius: Number.isFinite(parsed?.radius) ? parsed.radius : null,
+          reply: typeof parsed?.reply === 'string' ? parsed.reply.trim() : '',
+          suggestions: Array.isArray(parsed?.suggestions)
+            ? parsed.suggestions.map(item => String(item || '').trim()).filter(Boolean).slice(0, 4)
+            : [],
+        }
+        if (normalized.type === 'off_topic') {
+          if (!normalized.reply) {
+            normalized.reply = isZh
+              ? '我这里更擅长帮你找餐厅、推荐吃什么，当前这个话题不太适合在美食地图里处理。'
+              : 'I’m better at helping with restaurants and what to eat, so this topic does not fit the food map flow well.'
+          }
+          if (normalized.suggestions.length === 0) normalized.suggestions = fallbackSuggestions
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' })
-        return res.end(JSON.stringify(parsed || { keyword: text }))
+        return res.end(JSON.stringify(normalized))
       } catch (err) {
         console.error('[food] parse-intent error:', err.message)
         res.writeHead(200, { 'Content-Type': 'application/json' })
-        return res.end(JSON.stringify({ keyword: text }))
+        return res.end(JSON.stringify({ type: 'food_search', keyword: text, cuisine: null, radius: null, reply: '', suggestions: [] }))
       }
     }
+
+
 
     if (action === 'vote') {
       const redis = getRedis()
