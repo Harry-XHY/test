@@ -80,7 +80,7 @@ export default function FortuneModal({ onClose }) {
                 <div className="flex justify-between items-start">
                   <div className="flex flex-col">
                     <span className="text-[var(--primary)] text-[11px] font-bold tracking-widest uppercase mb-1">{t('chat.fortune_level')}</span>
-                    <h3 className="text-3xl font-black text-[var(--text)]">{fortune.level}</h3>
+                    <h3 className="text-3xl font-black text-[var(--text)]">{t(`fortune_items.${fortune.id}.level`, fortune.level)}</h3>
                   </div>
                   <span className="material-symbols-outlined text-[var(--primary)]/40">auto_awesome</span>
                 </div>
@@ -89,7 +89,7 @@ export default function FortuneModal({ onClose }) {
                 <div className="flex flex-col gap-4">
                   <div className="h-px w-12 bg-[var(--primary)]" />
                   <p className="text-xl leading-relaxed font-medium text-[var(--text)]">
-                    {fortune.message}
+                    {t(`fortune_items.${fortune.id}.message`, fortune.message)}
                   </p>
                 </div>
 
@@ -98,13 +98,13 @@ export default function FortuneModal({ onClose }) {
                   <div className="flex flex-col gap-2">
                     <span className="text-xs font-bold tracking-widest text-[var(--text-secondary)] uppercase">{t('chat.fortune_yi')}</span>
                     <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-3 py-2">
-                      <span className="text-emerald-400 font-bold text-sm">{fortune.yi}</span>
+                      <span className="text-emerald-400 font-bold text-sm">{t(`fortune_items.${fortune.id}.yi`, fortune.yi)}</span>
                     </div>
                   </div>
                   <div className="flex flex-col gap-2">
                     <span className="text-xs font-bold tracking-widest text-[var(--text-secondary)] uppercase">{t('chat.fortune_ji')}</span>
                     <div className="bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">
-                      <span className="text-red-400 font-bold text-sm">{fortune.ji}</span>
+                      <span className="text-red-400 font-bold text-sm">{t(`fortune_items.${fortune.id}.ji`, fortune.ji)}</span>
                     </div>
                   </div>
                 </div>

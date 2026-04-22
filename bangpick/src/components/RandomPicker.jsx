@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 
 export default function RandomPicker({ options, onPick }) {
+  const { t } = useTranslation()
   const [state, setState] = useState('idle')
   const [current, setCurrent] = useState('')
   const [winner, setWinner] = useState(null)
@@ -42,13 +44,13 @@ export default function RandomPicker({ options, onPick }) {
       {state === 'idle' && (
         <button onClick={start}
           className="glass-card w-full py-2.5 rounded-[16px] text-sm font-bold text-[var(--primary)] active:scale-[0.98] transition-transform cursor-pointer">
-          🎲 帮我随机选一个
+          {t('random.pick')}
         </button>
       )}
 
       {state === 'spinning' && (
         <div className="glass-card text-center py-3 rounded-[16px]">
-          <p className="text-xs text-[var(--muted)] mb-1">随机选择中...</p>
+          <p className="text-xs text-[var(--muted)] mb-1">{t('random.picking')}</p>
           <p className="text-lg font-extrabold text-white animate-pulse">{current}</p>
         </div>
       )}
@@ -60,15 +62,15 @@ export default function RandomPicker({ options, onPick }) {
             border: '1px solid rgba(34,197,94,0.25)',
           }}
         >
-          <p className="text-xs text-[#86efac] mb-1">🎉 就它了！</p>
+          <p className="text-xs text-[#86efac] mb-1">{t('random.result')}</p>
           <p className="text-lg font-extrabold text-white">{winner.name}</p>
           {winner.reason && <p className="text-xs text-[var(--muted)] mt-1">{winner.reason}</p>}
           <div className="flex justify-center gap-3 mt-2.5">
             <button onClick={() => { setState('idle'); setWinner(null) }}
-              className="text-xs text-[var(--primary)]">🔄 再转一次</button>
+              className="text-xs text-[var(--primary)]">{t('random.again')}</button>
             {onPick && (
               <button onClick={() => onPick(winner.name)}
-                className="text-xs text-[#86efac] font-bold">就选这个 →</button>
+                className="text-xs text-[#86efac] font-bold">{t('random.choose')}</button>
             )}
           </div>
         </div>

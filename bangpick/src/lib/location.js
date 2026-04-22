@@ -20,7 +20,13 @@ async function fetchWithTimeout(url, timeoutMs = 8000) {
 
 async function reverseGeocode(lat, lon) {
   // Use Vite proxy in dev, direct in prod (Netlify function would handle CORS)
-  const url = `/api/geocode/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=zh&zoom=16`
+  // Detect current language for localized place names
+  let lang = 'zh'
+  try {
+    const stored = localStorage.getItem('i18nextLng')
+    if (stored) lang = stored.split('-')[0]
+  } catch { /* fallback */ }
+  const url = `/api/geocode/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=${lang}&zoom=16`
   const res = await fetchWithTimeout(url, 8000)
   if (!res.ok) return null
   const data = await res.json()

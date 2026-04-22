@@ -2,6 +2,15 @@
 
 export const SECTORS = ['AI算力', '消费复苏', '新能源', '军工', '半导体', '医药生物']
 
+export const SECTOR_I18N_MAP = {
+  'AI算力': 'sectors.ai',
+  '消费复苏': 'sectors.consumer',
+  '新能源': 'sectors.energy',
+  '军工': 'sectors.military',
+  '半导体': 'sectors.semiconductor',
+  '医药生物': 'sectors.pharma',
+}
+
 export const STOCK_FEATURES = [
   {
     key: 'recommend',
@@ -30,10 +39,10 @@ export const STOCK_FEATURES = [
 ]
 
 export const STOCK_EXAMPLES = [
-  { text: 'AI算力板块有什么短线机会？', icon: 'bolt' },
-  { text: '帮我看看000001，成本15.5元', icon: 'search' },
-  { text: '今天大盘怎么样，适合交易吗？', icon: 'speed' },
-  { text: '半导体板块今天值得关注吗？', icon: 'memory' },
+  { key: 'example_0', icon: 'bolt' },
+  { key: 'example_1', icon: 'search' },
+  { key: 'example_2', icon: 'speed' },
+  { key: 'example_3', icon: 'memory' },
 ]
 
 // Detect user intent from free text input

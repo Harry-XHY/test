@@ -1,6 +1,7 @@
 // Canvas-based share card image generator
 
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
 
 function drawRadar(ctx, x, y, r, dimensions, scores, maxPerDim, color) {
@@ -71,6 +72,7 @@ function drawPersonalityIcon(ctx, cx, cy, size, personality) {
 }
 
 export default function ShareCard({ personality, scores, dimensions, dimensionLabels, quizTitle, aiResult, onClose }) {
+  const { t } = useTranslation()
   const [imgSrc, setImgSrc] = useState(null)
 
   useEffect(() => { generate() }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -158,7 +160,7 @@ export default function ShareCard({ personality, scores, dimensions, dimensionLa
     ctx.fillStyle = 'rgba(255,255,255,0.3)'
     ctx.font = '600 12px "Inter", sans-serif'
     ctx.textAlign = 'center'
-    ctx.fillText('bangpick — 帮我选', w / 2, h - 30)
+    ctx.fillText(t('share_card.watermark'), w / 2, h - 30)
 
     setImgSrc(canvas.toDataURL('image/png'))
   }
@@ -173,15 +175,15 @@ export default function ShareCard({ personality, scores, dimensions, dimensionLa
               <span className="w-2 h-2 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: '150ms' }} />
               <span className="w-2 h-2 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: '300ms' }} />
             </div>
-            <p className="text-sm text-[var(--muted)]">生成中...</p>
+            <p className="text-sm text-[var(--muted)]">{t('share_card.generating')}</p>
           </div>
         ) : (
           <div className="space-y-4">
-            <img src={imgSrc} alt="分享卡片" className="w-full rounded-xl" />
-            <p className="text-center text-sm text-[var(--text-secondary)]">长按图片保存到相册</p>
+            <img src={imgSrc} alt="" className="w-full rounded-xl" />
+            <p className="text-center text-sm text-[var(--text-secondary)]">{t('share_card.save_hint')}</p>
             <button onClick={onClose}
               className="w-full py-2.5 rounded-xl bg-white/10 text-white font-medium">
-              关闭
+              {t('share_card.close')}
             </button>
           </div>
         )}

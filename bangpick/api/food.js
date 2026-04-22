@@ -2,6 +2,14 @@
 // to stay within Vercel Hobby plan's 12 function limit.
 
 import { chatComplete } from './_aiProvider.js'
+import { getRedis } from './_redis.js'
+
+const VOTE_TTL_SEC = 60 * 60 * 24 * 7 // 7 days
+
+function voteJsonResponse(res, status, payload) {
+  res.writeHead(status, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify(payload))
+}
 
 const GOOGLE_KEY = process.env.GOOGLE_PLACES_API_KEY || ''
 const FOURSQUARE_KEY = process.env.FOURSQUARE_API_KEY || ''
@@ -58,6 +66,8 @@ async function searchGoogle({ lat, lon, radius, keyword, type, language }) {
 const OVERPASS_MIRRORS = [
   'https://overpass.kumi.systems/api/interpreter',
   'https://overpass-api.de/api/interpreter',
+  'https://lz4.overpass-api.de/api/interpreter',
+  'https://z.overpass-api.de/api/interpreter',
 ]
 const searchCache = new Map()
 const SEARCH_CACHE_TTL = 5 * 60 * 1000 // 5 min
@@ -385,18 +395,25 @@ export default async function handler(req, res) {
       const { lat, lon } = params
       if (!lat || !lon) { res.writeHead(400, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ error: 'lat and lon required' })) }
       let results = []
+      let anyBackendSucceeded = false
       // Priority: Google Places (New) → Overpass (free fallback)
       const backends = [
         GOOGLE_KEY && (() => searchGoogle(params)),
+        FOURSQUARE_KEY && (() => searchFoursquare(params)),
         () => searchOverpass(params),
       ].filter(Boolean)
       for (const backend of backends) {
         try {
           results = await backend()
+          anyBackendSucceeded = true
           if (results && results.length > 0) break
         } catch (err) {
           console.error('[food] search backend error:', err.message)
         }
+      }
+      if (!anyBackendSucceeded) {
+        res.writeHead(502, { 'Content-Type': 'application/json' })
+        return res.end(JSON.stringify({ error: 'all_backends_failed' }))
       }
       // Sort by composite score: distance (40%) + rating (35%) + popularity (25%)
       if (results && results.length > 1) {
@@ -427,7 +444,7 @@ export default async function handler(req, res) {
     }
 
     if (action === 'recommend') {
-      const { query, restaurants: rList, lang, country, currency } = params
+      const { query, restaurants: rList, lang, country, currency, dietaryProfile } = params
       if (!query) { res.writeHead(400, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ error: 'query required' })) }
 
       // Build restaurant context (compact, top 10 by distance)
@@ -441,15 +458,46 @@ export default async function handler(req, res) {
       const langName = langNames[lang?.split('-')[0]] || lang || '中文'
       const cur = currency || '¥'
 
-      const systemPrompt = isZh
-        ? `从附近餐厅列表中选2-3家推荐。返回JSON数组：[{"placeId":"从列表选","name":"店名","reason":"推荐理由15字","dishes":[{"name":"菜名","price":价格,"desc":"15字推荐理由","emoji":"🍖"}],"estimatedTotal":人均,"highlights":["标签"],"matchScore":0-100}]。价格${cur}。只返回JSON。`
-        : `Pick 2-3 from the nearby list. Return JSON: [{"placeId":"from list","name":"","reason":"brief why","dishes":[{"name":"","price":num,"desc":"15 word reason","emoji":"🍖"}],"estimatedTotal":num,"highlights":["tag"],"matchScore":0-100}]. Prices ${cur}. ${langName} only. JSON only.`
+      // Build dietary constraints if provided
+      let dietaryConstraint = ''
+      if (dietaryProfile) {
+        const parts = []
+        if (dietaryProfile.vegetarian) parts.push(isZh ? '用户是素食者，优先推荐有素食选项的餐厅，排除纯肉店/烧烤店。' : 'User is vegetarian. Prioritize restaurants with vegetarian options. Exclude BBQ/steak houses.')
+        if (dietaryProfile.vegan) parts.push(isZh ? '用户是纯素者，只推荐有纯素选项的餐厅。' : 'User is vegan. Only recommend restaurants with clear vegan options.')
+        if (dietaryProfile.halal) parts.push(isZh ? '用户需要清真食品。' : 'User requires halal food.')
+        if (dietaryProfile.glutenFree) parts.push(isZh ? '用户需要无麸质选项。' : 'User needs gluten-free options.')
+        if (dietaryProfile.allergens?.length) parts.push(isZh ? `用户对以下食物过敏，必须排除含有这些食材的菜品：${dietaryProfile.allergens.join('、')}。` : `User is allergic to: ${dietaryProfile.allergens.join(', ')}. Exclude dishes containing these.`)
+        if (dietaryProfile.spiceTolerance === 'none') parts.push(isZh ? '用户完全不能吃辣。' : 'User cannot tolerate spicy food at all.')
+        if (dietaryProfile.spiceTolerance === 'mild') parts.push(isZh ? '用户只能接受微辣。' : 'User prefers mild spice only.')
+        if (dietaryProfile.spiceTolerance === 'hot') parts.push(isZh ? '用户喜欢吃辣，优先推荐辣味餐厅。' : 'User loves spicy food. Prioritize spicy cuisine.')
+        if (dietaryProfile.budgetPreference === 'cheap') parts.push(isZh ? '用户预算有限，优先推荐平价餐厅。' : 'User is budget-conscious. Prioritize inexpensive options.')
+        if (dietaryProfile.budgetPreference === 'expensive') parts.push(isZh ? '用户愿意花更多钱享受美食，可推荐高档餐厅。' : 'User is willing to spend more. High-end recommendations welcome.')
+        dietaryConstraint = parts.join('\n')
+      }
+
+      const basePrompt = isZh
+        ? `从附近餐厅列表中选2-3家推荐。返回JSON数组：[{"placeId":"从列表选","name":"店名","reason":"推荐理由15字","dishes":[{"name":"菜名","price":价格,"desc":"15字推荐理由","emoji":"🍖"}],"estimatedTotal":人均,"highlights":["标签"],"matchScore":0-100${dietaryConstraint ? ',"dietaryMatch":"为什么符合用户饮食偏好，15字"' : ''}}]。价格${cur}。只返回JSON。`
+        : `Pick 2-3 from the nearby list. Return JSON: [{"placeId":"from list","name":"","reason":"brief why","dishes":[{"name":"","price":num,"desc":"15 word reason","emoji":"🍖"}],"estimatedTotal":num,"highlights":["tag"],"matchScore":0-100${dietaryConstraint ? ',"dietaryMatch":"why this matches dietary preference, 15 words"' : ''}}]. Prices ${cur}. ${langName} only. JSON only.`
+
+      const systemPrompt = dietaryConstraint
+        ? basePrompt + '\n\n用户饮食约束：\n' + dietaryConstraint
+        : basePrompt
+
+      // Helper: enrich AI picks with data from restaurant list
+      const enrichRecs = (parsed) => {
+        for (const rec of parsed) {
+          const orig = topR.find(r => r.placeId === rec.placeId)
+          if (orig) { rec.location = orig.location; rec.distance = orig.distance; rec.rating = orig.rating; rec.photos = orig.photos; rec.source = orig.source }
+        }
+        return parsed
+      }
 
       try {
         const result = await chatComplete({
           system: systemPrompt,
           messages: [{ role: 'user', content: `"${query}" | ${country || '?'}\n${rContext}` }],
           maxTokens: 800,
+          timeoutMs: 15000, // 15s timeout for recommendations
         })
         let parsed
         try { parsed = JSON.parse(result.text) } catch {
@@ -457,23 +505,19 @@ export default async function handler(req, res) {
           if (m) try { parsed = JSON.parse(m[0]) } catch {}
         }
         if (!Array.isArray(parsed)) parsed = parsed ? [parsed] : []
-        // Enrich with location/distance from original restaurant list
-        for (const rec of parsed) {
-          const orig = topR.find(r => r.placeId === rec.placeId)
-          if (orig) {
-            rec.location = orig.location
-            rec.distance = orig.distance
-            rec.rating = orig.rating
-            rec.photos = orig.photos
-            rec.source = orig.source
-          }
-        }
         res.writeHead(200, { 'Content-Type': 'application/json' })
-        return res.end(JSON.stringify(parsed))
+        return res.end(JSON.stringify(enrichRecs(parsed)))
       } catch (err) {
-        console.error('[food] recommend error:', err.message)
-        res.writeHead(500, { 'Content-Type': 'application/json' })
-        return res.end(JSON.stringify({ error: err.message }))
+        console.error('[food] recommend AI error, using score fallback:', err.message)
+        // Fallback: pick top 3 by rating/distance when AI is slow/down
+        const fallback = topR.slice(0, 3).map(r => ({
+          placeId: r.placeId, name: r.name, reason: '',
+          dishes: [], estimatedTotal: null, highlights: (r.cuisine || r.types?.slice(0,2).join(',') || '').split(/[;,]/).filter(Boolean).slice(0, 2),
+          matchScore: r.rating ? Math.round(r.rating * 20) : 60,
+          location: r.location, distance: r.distance, rating: r.rating, photos: r.photos, source: r.source,
+        }))
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        return res.end(JSON.stringify(fallback))
       }
     }
 
@@ -493,6 +537,7 @@ export default async function handler(req, res) {
           system: systemPrompt,
           messages: [{ role: 'user', content: `${name} | ${cuisine || '?'}` }],
           maxTokens: 512,
+          timeoutMs: 12000,
         })
         let parsed
         try { parsed = JSON.parse(aiResult.text) } catch {
@@ -525,6 +570,7 @@ Return ONLY JSON. If you cannot parse, return {"keyword":"original text"}`
           system: systemPrompt,
           messages: [{ role: 'user', content: `${country ? `Country: ${country}. ` : ''}Parse: "${text}"` }],
           maxTokens: 256,
+          timeoutMs: 8000,
         })
         let parsed
         try { parsed = JSON.parse(result.text) } catch {
@@ -540,8 +586,54 @@ Return ONLY JSON. If you cannot parse, return {"keyword":"original text"}`
       }
     }
 
+    if (action === 'vote') {
+      const redis = getRedis()
+      if (!redis) {
+        return voteJsonResponse(res, 503, { error: 'vote_unavailable' })
+      }
+      const { voteAction, voteId, placeId, nickname, message } = params
+      if (!voteId || typeof voteId !== 'string') {
+        return voteJsonResponse(res, 400, { error: 'voteId_required' })
+      }
+      const key = `vote:${voteId}`
+
+      if (voteAction === 'get') {
+        try {
+          const data = await redis.get(key)
+          if (!data) return voteJsonResponse(res, 404, { error: 'vote_not_found' })
+          return voteJsonResponse(res, 200, data)
+        } catch (err) {
+          return voteJsonResponse(res, 500, { error: 'vote_read_failed' })
+        }
+      }
+
+      if (voteAction === 'cast') {
+        if (!placeId || typeof placeId !== 'string') {
+          return voteJsonResponse(res, 400, { error: 'placeId_required' })
+        }
+        try {
+          let data = await redis.get(key)
+          if (!data) {
+            data = { restaurants: {}, messages: [], totalVotes: 0, createdAt: Date.now() }
+          }
+          data.restaurants[placeId] = (data.restaurants[placeId] || 0) + 1
+          data.totalVotes = (data.totalVotes || 0) + 1
+          if (message && typeof message === 'string') {
+            data.messages.push({ nickname: nickname || 'Anonymous', placeId, message: message.slice(0, 200), ts: Date.now() })
+            if (data.messages.length > 50) data.messages = data.messages.slice(-50)
+          }
+          await redis.set(key, data, { ex: VOTE_TTL_SEC })
+          return voteJsonResponse(res, 200, { ok: true, currentTallies: data.restaurants, totalVotes: data.totalVotes })
+        } catch (err) {
+          return voteJsonResponse(res, 500, { error: 'vote_cast_failed' })
+        }
+      }
+
+      return voteJsonResponse(res, 400, { error: 'invalid_voteAction' })
+    }
+
     res.writeHead(400, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ error: 'Unknown action. Use: search, detail, photo, parse-intent' }))
+    res.end(JSON.stringify({ error: 'Unknown action. Use: search, detail, photo, parse-intent, vote' }))
   } catch (err) {
     console.error('[food]', err.message)
     res.writeHead(500, { 'Content-Type': 'application/json' })

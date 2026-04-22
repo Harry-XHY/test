@@ -1,4 +1,7 @@
+import { useTranslation } from 'react-i18next'
+
 export default function OptionCard({ option, rank, onVote, showVote, onSelect }) {
+  const { t } = useTranslation()
   const rankEmojis = ['🥇', '🥈', '🥉']
 
   // Two click modes:
@@ -7,7 +10,7 @@ export default function OptionCard({ option, rank, onVote, showVote, onSelect })
   const handleClick = showVote
     ? () => onVote?.(option.id)
     : onSelect
-      ? () => onSelect(`就选${option.name}`)
+      ? () => onSelect(t('chat.pick_this', { name: option.name }))
       : undefined
 
   const clickable = Boolean(handleClick)
@@ -27,7 +30,7 @@ export default function OptionCard({ option, rank, onVote, showVote, onSelect })
           {rankEmojis[rank] || ''} {option.name}
         </h3>
         {showVote && option.votes > 0 && (
-          <span className="text-sm text-blue-400 font-medium">{option.votes} 票</span>
+          <span className="text-sm text-blue-400 font-medium">{t('option.votes', { count: option.votes })}</span>
         )}
       </div>
       <p className="text-slate-300 text-sm mb-3">{option.reason}</p>

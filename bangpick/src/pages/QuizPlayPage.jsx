@@ -1,13 +1,15 @@
 // Quiz play page — answer questions one at a time
 
 import { useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Navigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { QUIZZES } from '../lib/quizData'
 import { calcScores, matchPersonality, saveQuizResult } from '../lib/quizLogic'
 
 export default function QuizPlayPage() {
   const { type } = useParams()
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const quiz = QUIZZES[type]
 
   const [currentQ, setCurrentQ] = useState(0)
@@ -15,8 +17,7 @@ export default function QuizPlayPage() {
   const [selected, setSelected] = useState(null) // animation state
 
   if (!quiz) {
-    navigate('/quiz')
-    return null
+    return <Navigate to="/quiz" replace />
   }
 
   const total = quiz.questions.length
@@ -62,7 +63,7 @@ export default function QuizPlayPage() {
           <button onClick={handleBack} className="mr-3 text-[var(--muted)]">
             <span className="material-symbols-outlined">arrow_back</span>
           </button>
-          <h1 className="text-lg font-bold text-[var(--text)]">{quiz.title}</h1>
+          <h1 className="text-lg font-bold text-[var(--text)]">{t(quiz.title)}</h1>
           <span className="ml-auto text-sm text-[var(--muted)] font-medium">{currentQ + 1}/{total}</span>
         </div>
         {/* Progress bar */}
@@ -75,7 +76,7 @@ export default function QuizPlayPage() {
       {/* Question */}
       <main className="flex-1 flex flex-col justify-center px-6 max-w-xl mx-auto w-full">
         <div className="mb-8">
-          <p className="text-2xl font-bold text-[var(--text)] leading-relaxed">{question.q}</p>
+          <p className="text-2xl font-bold text-[var(--text)] leading-relaxed">{t(question.q)}</p>
         </div>
 
         <div className="space-y-3">
@@ -104,7 +105,7 @@ export default function QuizPlayPage() {
                   }>
                   {String.fromCharCode(65 + idx)}
                 </span>
-                <span className="text-[15px] font-medium text-[var(--text)]">{opt.text}</span>
+                <span className="text-[15px] font-medium text-[var(--text)]">{t(opt.text)}</span>
               </div>
             </button>
           ))}

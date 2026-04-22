@@ -1,9 +1,11 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import OptionCard from './OptionCard'
 
 export default function VotePanel({ options: initialOptions, onVoteComplete }) {
   const [options, setOptions] = useState(initialOptions)
   const [voted, setVoted] = useState(false)
+  const { t } = useTranslation()
 
   function handleVote(optionId) {
     if (voted) return
@@ -26,10 +28,10 @@ export default function VotePanel({ options: initialOptions, onVoteComplete }) {
         />
       ))}
       {voted && (
-        <p className="text-center text-sm text-green-400 mt-2">✓ 已投票！</p>
+        <p className="text-center text-sm text-green-400 mt-2">{t('vote.voted')}</p>
       )}
       {!voted && (
-        <p className="text-center text-xs text-slate-500">点击选项进行投票</p>
+        <p className="text-center text-xs text-slate-500">{t('vote.click_to_vote')}</p>
       )}
     </div>
   )

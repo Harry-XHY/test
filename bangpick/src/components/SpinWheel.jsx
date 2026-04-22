@@ -1,14 +1,16 @@
 import { useState, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 
 const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981']
 
 export default function SpinWheel({ options }) {
+  const { t } = useTranslation()
   const [spinning, setSpinning] = useState(false)
   const [result, setResult] = useState(null)
   const wheelRef = useRef(null)
 
   if (options.length < 2) {
-    return <p className="text-center text-slate-400">至少需要 2 个选项才能转盘</p>
+    return <p className="text-center text-slate-400">{t('spin.min_options')}</p>
   }
 
   const sliceAngle = 360 / options.length
@@ -89,12 +91,12 @@ export default function SpinWheel({ options }) {
         disabled={spinning}
         className="px-8 py-3 rounded-xl bg-purple-600 text-white font-bold text-lg active:bg-purple-700 disabled:opacity-50"
       >
-        {spinning ? '转动中...' : '🎰 转！'}
+        {spinning ? t('spin.spinning') : t('spin.go')}
       </button>
 
       {result && (
         <div className="text-center mt-2 p-3 bg-green-900/30 rounded-xl border border-green-700">
-          <p className="text-green-400 font-bold text-lg">就它了！ {result.name}</p>
+          <p className="text-green-400 font-bold text-lg">{t('spin.result')} {result.name}</p>
           <p className="text-slate-300 text-sm mt-1">{result.reason}</p>
         </div>
       )}

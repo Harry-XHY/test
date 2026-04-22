@@ -1,12 +1,36 @@
+import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
+import { formatPrice, getNavUrl } from '../lib/countryConfig'
+import { getDishSuggestions } from '../lib/foodApi'
 
-export default function RestaurantDetail({ detail: d, loading, onClose }) {
-  const { t } = useTranslation()
+export default function RestaurantDetail({ detail: d, loading, onClose, countryConfig }) {
+  const { t, i18n } = useTranslation()
+  const [dishes, setDishes] = useState([])
+  const [dishLoading, setDishLoading] = useState(false)
+
+  const cfg = countryConfig || {}
+  const cur = cfg.currency || '¥'
+
+  useEffect(() => {
+    if (!d?.name) return
+    setDishLoading(true)
+    setDishes([])
+    getDishSuggestions({
+      name: d.name,
+      cuisine: d.cuisine || d.types?.join(',') || '',
+      lang: i18n.language,
+      country: cfg.countryCode,
+      currency: cur,
+    }).then(result => {
+      setDishes(Array.isArray(result) ? result : [])
+    }).catch(() => setDishes([])).finally(() => setDishLoading(false))
+  }, [d?.placeId])
+
   if (!d) return null
 
   const navUrl = d.location
-    ? `https://www.google.com/maps/dir/?api=1&destination=${d.location.lat},${d.location.lng}&destination_place_id=${d.placeId || ''}`
+    ? getNavUrl(d.location.lat, d.location.lng, d.placeId, cfg.navProvider || 'google')
     : null
 
   const content = (
@@ -16,7 +40,7 @@ export default function RestaurantDetail({ detail: d, loading, onClose }) {
 
       {/* Sheet */}
       <div
-        className="relative max-h-[75vh] rounded-t-2xl overflow-y-auto"
+        className="relative max-h-[85vh] rounded-t-2xl overflow-y-auto"
         style={{ background: '#12161e', border: '1px solid rgba(255,255,255,0.08)' }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -26,6 +50,22 @@ export default function RestaurantDetail({ detail: d, loading, onClose }) {
         </div>
 
         <div className="px-5 pb-6">
+          {/* Real photos from Google Places */}
+          {(d.source === 'google' || d.source === 'foursquare') && d.photos && d.photos.length > 0 && (
+            <div className="flex gap-2 mb-4 overflow-x-auto hide-scrollbar -mx-1 px-1">
+              {d.photos.map((ref, i) => (
+                <img
+                  key={i}
+                  src={ref.startsWith('http') ? ref : `/api/food?action=photo&ref=${ref}&maxwidth=400`}
+                  alt={`${d.name} ${i + 1}`}
+                  className="h-32 rounded-xl object-cover flex-shrink-0"
+                  style={{ minWidth: d.photos.length === 1 ? '100%' : '70%' }}
+                  loading="lazy"
+                />
+              ))}
+            </div>
+          )}
+
           {/* Header */}
           <div className="flex items-start justify-between mb-4">
             <div className="flex-1 min-w-0">
@@ -42,7 +82,7 @@ export default function RestaurantDetail({ detail: d, loading, onClose }) {
                   </span>
                 )}
                 {d.priceLevel != null && (
-                  <span className="text-sm" style={{ color: '#72757d' }}>{'¥'.repeat(d.priceLevel || 1)}</span>
+                  <span className="text-sm" style={{ color: '#72757d' }}>{formatPrice(d.priceLevel, cur)}</span>
                 )}
                 {d.isOpen != null && (
                   <span className="text-[11px] font-medium" style={{ color: d.isOpen ? '#22c55e' : '#ef4444' }}>
@@ -51,10 +91,28 @@ export default function RestaurantDetail({ detail: d, loading, onClose }) {
                 )}
               </div>
               {d.cuisine && (
-                <span className="inline-block mt-1.5 text-[11px] px-2 py-0.5 rounded-md"
-                  style={{ background: 'rgba(182,160,255,0.1)', color: '#b6a0ff' }}>
-                  {d.cuisine}
-                </span>
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                  {d.cuisine.split(';').map((raw, i) => {
+                    const tag = raw.trim()
+                    const key = `food.tag_${tag}`
+                    const v = t(key)
+                    let label
+                    if (v !== key) {
+                      label = v
+                    } else {
+                      const short = tag.replace(/_(restaurant|store|shop|house)$/, '')
+                      const key2 = `food.tag_${short}`
+                      const v2 = t(key2)
+                      label = v2 !== key2 ? v2 : tag.replace(/_/g, ' ')
+                    }
+                    return (
+                      <span key={i} className="text-[11px] px-2 py-0.5 rounded-md"
+                        style={{ background: 'rgba(182,160,255,0.1)', color: '#b6a0ff' }}>
+                        {label}
+                      </span>
+                    )
+                  })}
+                </div>
               )}
             </div>
             <button
@@ -74,6 +132,62 @@ export default function RestaurantDetail({ detail: d, loading, onClose }) {
 
           {!loading && (
             <>
+              {/* Recommended Dishes */}
+              <div className="mb-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="material-symbols-outlined text-[16px]" style={{ color: '#f59e0b' }}>restaurant_menu</span>
+                  <span className="text-sm font-semibold" style={{ color: '#a8abb3' }}>{t('food.signature_dishes')}</span>
+                  {dishLoading && <span className="material-symbols-outlined text-[14px] animate-spin" style={{ color: '#5B8CFF' }}>refresh</span>}
+                </div>
+                {dishLoading && dishes.length === 0 && (
+                  <div className="rounded-xl p-4" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                    <div className="flex items-center gap-2">
+                      <div className="flex gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#5B8CFF] animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#5B8CFF] animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#5B8CFF] animate-bounce" style={{ animationDelay: '300ms' }} />
+                      </div>
+                      <span className="text-[11px]" style={{ color: '#72757d' }}>{t('food.ai_thinking')}</span>
+                    </div>
+                  </div>
+                )}
+                {dishes.length > 0 && (
+                  <div className="rounded-xl overflow-hidden" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                    {dishes.map((dish, i) => {
+                      // Use dish's own image, or fall back to restaurant's Google photos
+                      const dishImg = dish.image
+                        || (d.photos && d.photos[i % d.photos.length]
+                          ? (d.photos[i % d.photos.length].startsWith('http')
+                            ? d.photos[i % d.photos.length]
+                            : `/api/food?action=photo&ref=${d.photos[i % d.photos.length]}&maxwidth=120`)
+                          : null)
+                      return (
+                      <div key={i}
+                        className="flex items-center gap-3 px-3 py-3"
+                        style={{ borderTop: i > 0 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}
+                      >
+                        {dishImg && (
+                          <img src={dishImg} alt={dish.name}
+                            className="w-10 h-10 rounded-lg object-cover flex-shrink-0" loading="lazy" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <span className="text-[13px] font-medium block truncate" style={{ color: '#e4e6ef' }}>{dish.name}</span>
+                          {dish.desc && <span className="text-[11px] block truncate" style={{ color: '#72757d' }}>{dish.desc}</span>}
+                        </div>
+                        {dish.price != null && (
+                          <span className="flex-shrink-0 text-[14px] font-mono font-bold ml-2" style={{ color: '#f59e0b' }}>
+                            {cur}{dish.price}
+                          </span>
+                        )}
+                      </div>
+                    )})}
+                  </div>
+                )}
+                {!dishLoading && dishes.length === 0 && (
+                  <div className="text-[11px] py-2" style={{ color: '#52555c' }}>{t('food.no_dish_data')}</div>
+                )}
+              </div>
+
               {/* Info rows */}
               <div className="flex flex-col gap-2.5 mb-5">
                 {d.address && (

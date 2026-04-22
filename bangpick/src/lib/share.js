@@ -15,8 +15,10 @@ export async function getSharedDecision(id) {
   return null
 }
 
-export async function shareOrCopy(url, question) {
-  const text = `我在纠结：${question}，快来帮我选！`
+export async function shareOrCopy(url, question, type) {
+  const text = type === 'foodVote'
+    ? `一起来约饭：${question}，快来投票！`
+    : `我在纠结：${question}，快来帮我选！`
 
   if (navigator.share) {
     try {

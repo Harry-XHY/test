@@ -17,11 +17,11 @@ export default function FortuneCard({ onOpen }) {
         <span className="material-symbols-outlined text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>flare</span>
       </div>
       <h5 className="text-[15px] font-bold text-[var(--text)] mb-0.5">
-        {drawn ? fortune.level : t('chat.fortune_undraw')}
+        {drawn ? t(`fortune_items.${fortune.id}.level`, fortune.level) : t('chat.fortune_undraw')}
       </h5>
       <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
         {drawn
-          ? (fortune.message.length > 10 ? fortune.message.slice(0, 10) + '…' : fortune.message)
+          ? (() => { const msg = t(`fortune_items.${fortune.id}.message`, fortune.message); return msg.length > 10 ? msg.slice(0, 10) + '…' : msg })()
           : t('chat.fortune_undraw_desc')}
       </p>
     </button>

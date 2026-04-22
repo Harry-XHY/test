@@ -1,10 +1,12 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ALERT_TYPES, addAlert } from '../lib/alerts'
 
 // 提醒设置 Modal — opens from a watchlist row or AI analysis card.
 // Caller passes the target stock; user picks the alert type and threshold.
 
 export default function AlertSetup({ stock, onClose, onCreated }) {
+  const { t } = useTranslation()
   const [type, setType] = useState('price_above')
   const [threshold, setThreshold] = useState('')
   const [busy, setBusy] = useState(false)
@@ -20,7 +22,7 @@ export default function AlertSetup({ stock, onClose, onCreated }) {
     if (needsThreshold) {
       value = parseFloat(threshold)
       if (!isFinite(value) || value <= 0) {
-        setError('请输入有效数字')
+        setError(t('alert.invalid_number'))
         return
       }
     }
@@ -37,7 +39,7 @@ export default function AlertSetup({ stock, onClose, onCreated }) {
       onCreated?.(created)
       onClose?.()
     } catch (err) {
-      setError(err?.message || '添加失败')
+      setError(err?.message || t('alert.add_failed'))
     } finally {
       setBusy(false)
     }
@@ -46,23 +48,23 @@ export default function AlertSetup({ stock, onClose, onCreated }) {
   // Group types so the picker reads as 价格 / 涨跌幅 / 技术 — easier to scan
   // than a single 7-row dropdown.
   const groups = [
-    { label: '价格', items: ALERT_TYPES.filter(t => t.value.startsWith('price_')) },
-    { label: '涨跌幅', items: ALERT_TYPES.filter(t => t.value.startsWith('change_pct_')) },
-    { label: '技术 / 量能', items: ALERT_TYPES.filter(t => t.value.startsWith('macd_') || t.value.startsWith('vol_')) },
+    { label: t('alert.price'), items: ALERT_TYPES.filter(a => a.value.startsWith('price_')) },
+    { label: t('alert.change_pct'), items: ALERT_TYPES.filter(a => a.value.startsWith('change_pct_')) },
+    { label: t('alert.technical'), items: ALERT_TYPES.filter(a => a.value.startsWith('macd_') || a.value.startsWith('vol_')) },
   ]
 
   const placeholder =
     selected?.value === 'change_pct_above' || selected?.value === 'change_pct_below'
-      ? '例如 5'
+      ? t('alert.eg_pct')
       : selected?.value === 'vol_ratio_above'
-        ? '例如 2'
-        : '例如 1700'
+        ? t('alert.eg_vol')
+        : t('alert.eg_price')
 
   const helper =
-    selected?.value === 'change_pct_below' ? '填正数，例如 5 表示当日跌幅达到 5%'
-    : selected?.value === 'change_pct_above' ? '当日涨幅达到此百分比时提醒'
-    : (selected?.value === 'price_above' || selected?.value === 'price_below') ? '最新价触达此价位时提醒'
-    : selected?.value === 'vol_ratio_above' ? '量比达到此倍数时提醒（资金活跃度）'
+    selected?.value === 'change_pct_below' ? t('alert.helper_drop_pct')
+    : selected?.value === 'change_pct_above' ? t('alert.helper_rise_pct')
+    : (selected?.value === 'price_above' || selected?.value === 'price_below') ? t('alert.helper_price')
+    : selected?.value === 'vol_ratio_above' ? t('alert.helper_vol')
     : ''
 
   return (
@@ -92,12 +94,12 @@ export default function AlertSetup({ stock, onClose, onCreated }) {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <span className="text-lg">🔔</span>
-              <h3 className="text-base font-bold text-white tracking-wide">设置提醒</h3>
+              <h3 className="text-base font-bold text-white tracking-wide">{t('alert.setup_title')}</h3>
             </div>
             <button
               onClick={onClose}
               className="w-8 h-8 rounded-full grid place-items-center text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
-              aria-label="关闭"
+              aria-label={t('common.close')}
             >
               <span className="text-lg leading-none">×</span>
             </button>
@@ -125,7 +127,7 @@ export default function AlertSetup({ stock, onClose, onCreated }) {
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Type picker — grouped pill grid */}
             <div>
-              <label className="block text-[11px] uppercase tracking-[0.12em] font-bold text-slate-500 mb-2.5">提醒类型</label>
+              <label className="block text-[11px] uppercase tracking-[0.12em] font-bold text-slate-500 mb-2.5">{t('alert.type_label')}</label>
               <div className="space-y-3">
                 {groups.map(g => (
                   <div key={g.label}>
@@ -166,7 +168,7 @@ export default function AlertSetup({ stock, onClose, onCreated }) {
             {needsThreshold && (
               <div>
                 <label className="block text-[11px] uppercase tracking-[0.12em] font-bold text-slate-500 mb-2.5">
-                  阈值 {selected?.unit ? <span className="text-slate-400 normal-case">（{selected.unit}）</span> : ''}
+                  {t('alert.threshold')} {selected?.unit ? <span className="text-slate-400 normal-case">（{selected.unit}）</span> : ''}
                 </label>
                 <div className="relative">
                   <input
@@ -196,7 +198,7 @@ export default function AlertSetup({ stock, onClose, onCreated }) {
 
             <p className="text-[11px] text-slate-500 leading-relaxed flex items-start gap-1.5">
               <span className="mt-0.5">ⓘ</span>
-              <span>A 股交易时段每 5 分钟检查一次，触发后自动停用并出现在通知栏。</span>
+              <span>{t('alert.check_note')}</span>
             </p>
 
             <button
@@ -208,7 +210,7 @@ export default function AlertSetup({ stock, onClose, onCreated }) {
                 boxShadow: '0 8px 24px rgba(139,92,246,0.35)',
               }}
             >
-              {busy ? '添加中…' : '✓ 添加提醒'}
+              {busy ? t('alert.adding') : t('alert.add_alert')}
             </button>
           </form>
         </div>

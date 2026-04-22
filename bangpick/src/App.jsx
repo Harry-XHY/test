@@ -9,6 +9,7 @@ import QuizResultPage from './pages/QuizResultPage'
 import SharePage from './pages/SharePage'
 import StockPage from './pages/StockPage'
 import FoodPage from './pages/FoodPage'
+import FoodVoteHostPage from './pages/FoodVoteHostPage'
 import NotificationBanner from './components/NotificationBanner'
 import { hydrateOnBoot } from './lib/cloudSync'
 
@@ -25,6 +26,7 @@ export default function App() {
         <Route path="/stock" element={<StockPage />} />
         <Route path="/watchlist" element={<Navigate to="/stock" replace />} />
         <Route path="/food" element={<FoodPage />} />
+        <Route path="/food-vote/:id" element={<FoodVoteHostPage />} />
         <Route path="/history" element={<HistoryPage />} />
         <Route path="/quiz" element={<QuizPage />} />
         <Route path="/quiz/:type" element={<QuizPlayPage />} />

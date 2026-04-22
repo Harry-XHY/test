@@ -20,6 +20,8 @@ export const BUCKET_LOCAL_KEYS = {
   watchlist: 'bangpick_watchlist',
   snapshots: 'bangpick_snapshots',
   alerts: 'bangpick_alerts',
+  dietaryProfile: 'bangpick_dietary_profile',
+  foodVotes: 'bangpick_food_votes',
 }
 
 const BUCKETS = Object.keys(BUCKET_LOCAL_KEYS)

@@ -114,13 +114,13 @@ function toOpenAIMessages(system, messages) {
   return arr
 }
 
-async function geminiComplete({ system, messages, maxTokens = 1024 }) {
+async function geminiComplete({ system, messages, maxTokens = 1024, timeoutMs }) {
   const body = JSON.stringify({
     model: GEMINI_MODEL,
     max_tokens: maxTokens,
     messages: toOpenAIMessages(system, messages),
   })
-  const r = await httpsPostJSON(`${GEMINI_BASE}/chat/completions`, geminiAuthHeaders(), body)
+  const r = await httpsPostJSON(`${GEMINI_BASE}/chat/completions`, geminiAuthHeaders(), body, timeoutMs)
   if (r.status !== 200) throw new Error(`gemini ${r.status}: ${r.body.slice(0, 200)}`)
   const data = JSON.parse(r.body)
   const text = data.choices?.[0]?.message?.content || ''
@@ -163,7 +163,7 @@ function zhipuAuthHeaders() {
   return { Authorization: `Bearer ${key}` }
 }
 
-async function zhipuComplete({ system, messages, maxTokens = 1024 }) {
+async function zhipuComplete({ system, messages, maxTokens = 1024, timeoutMs }) {
   const body = JSON.stringify({
     model: ZHIPU_MODEL,
     max_tokens: maxTokens,
@@ -172,7 +172,7 @@ async function zhipuComplete({ system, messages, maxTokens = 1024 }) {
     thinking: { type: 'disabled' },
     messages: toOpenAIMessages(system, messages),
   })
-  const r = await httpsPostJSON(`${ZHIPU_BASE}/chat/completions`, zhipuAuthHeaders(), body)
+  const r = await httpsPostJSON(`${ZHIPU_BASE}/chat/completions`, zhipuAuthHeaders(), body, timeoutMs)
   if (r.status !== 200) throw new Error(`zhipu ${r.status}: ${r.body.slice(0, 200)}`)
   const data = JSON.parse(r.body)
   const text = data.choices?.[0]?.message?.content || ''
@@ -214,13 +214,13 @@ function qwenAuthHeaders() {
   return { Authorization: `Bearer ${key}` }
 }
 
-async function qwenComplete({ system, messages, maxTokens = 1024 }) {
+async function qwenComplete({ system, messages, maxTokens = 1024, timeoutMs }) {
   const body = JSON.stringify({
     model: QWEN_MODEL,
     max_tokens: maxTokens,
     messages: toOpenAIMessages(system, messages),
   })
-  const r = await httpsPostJSON(`${QWEN_BASE}/chat/completions`, qwenAuthHeaders(), body)
+  const r = await httpsPostJSON(`${QWEN_BASE}/chat/completions`, qwenAuthHeaders(), body, timeoutMs)
   if (r.status !== 200) throw new Error(`qwen ${r.status}: ${r.body.slice(0, 200)}`)
   const data = JSON.parse(r.body)
   const text = data.choices?.[0]?.message?.content || ''
@@ -257,7 +257,7 @@ function minimaxAuthHeaders() {
   return { Authorization: `Bearer ${key}` }
 }
 
-async function minimaxComplete({ system, messages, maxTokens = 1024 }) {
+async function minimaxComplete({ system, messages, maxTokens = 1024, timeoutMs }) {
   const body = JSON.stringify({
     model: MINIMAX_MODEL,
     max_tokens: maxTokens,
@@ -267,7 +267,7 @@ async function minimaxComplete({ system, messages, maxTokens = 1024 }) {
       content: String(m.content || ''),
     })),
   })
-  const r = await httpsPostJSON(MINIMAX_URL, minimaxAuthHeaders(), body)
+  const r = await httpsPostJSON(MINIMAX_URL, minimaxAuthHeaders(), body, timeoutMs)
   if (r.status !== 200) throw new Error(`minimax ${r.status}: ${r.body.slice(0, 200)}`)
   const data = JSON.parse(r.body)
   const text = Array.isArray(data.content)

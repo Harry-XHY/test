@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { pullNotifications, clearNotifications } from '../lib/cloudSync'
 
 // Polls the user's notifications queue once on mount, displays unread alert
@@ -6,6 +7,7 @@ import { pullNotifications, clearNotifications } from '../lib/cloudSync'
 // to clear the queue so they don't come back on next boot.
 
 export default function NotificationBanner() {
+  const { t, i18n } = useTranslation()
   const [items, setItems] = useState([])
   const [loaded, setLoaded] = useState(false)
 
@@ -53,13 +55,13 @@ export default function NotificationBanner() {
           <div className="flex-1 min-w-0">
             <p className="text-white text-sm font-medium leading-snug break-words">{n.message}</p>
             <p className="text-white/60 text-[10px] mt-1">
-              {new Date(n.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })}
+              {new Date(n.createdAt).toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit', hour12: false })}
             </p>
           </div>
           <button
             onClick={() => dismissOne(n.id)}
             className="text-white/80 hover:text-white text-lg leading-none px-1"
-            title="知道了"
+            title={t('notification.dismiss')}
           >
             ×
           </button>
@@ -70,7 +72,7 @@ export default function NotificationBanner() {
           onClick={dismissAll}
           className="pointer-events-auto self-center text-[11px] text-white/80 bg-black/40 backdrop-blur px-3 py-1 rounded-full"
         >
-          还有 {items.length - 3} 条 · 全部知道了
+          {t('notification.more_dismiss', { count: items.length - 3 })}
         </button>
       )}
     </div>

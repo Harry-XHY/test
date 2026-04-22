@@ -1,7 +1,8 @@
 // Quiz result page — personality type + AI interpretation + share card
 
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Navigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { QUIZZES } from '../lib/quizData'
 import { loadQuizResult, buildQuizPrompt } from '../lib/quizLogic'
 import { sendMessage } from '../lib/minimax'
@@ -10,12 +11,7 @@ import ShareCard from '../components/ShareCard'
 import QuizIcon from '../components/QuizIcons'
 import BottomNav from '../components/BottomNav'
 
-const LOADING_TEXTS = [
-  '正在窥探你的灵魂...',
-  '分析你的脑回路中...',
-  '解码你的决策DNA...',
-  '正在生成毒舌点评...',
-]
+// Loading texts are resolved via i18n in the component
 
 function extractAIResult(text) {
   try { return JSON.parse(text) } catch {}
@@ -27,8 +23,11 @@ function extractAIResult(text) {
 export default function QuizResultPage() {
   const { type } = useParams()
   const navigate = useNavigate()
+  const { t, i18n } = useTranslation()
   const quiz = QUIZZES[type]
   const result = loadQuizResult(type)
+
+  const LOADING_TEXTS = [t('quiz.loading_1'), t('quiz.loading_2'), t('quiz.loading_3'), t('quiz.loading_4')]
 
   const [aiResult, setAiResult] = useState(null)
   const [aiLoading, setAiLoading] = useState(false)
@@ -49,7 +48,7 @@ export default function QuizResultPage() {
       setLoadingText(LOADING_TEXTS[idx])
     }, 2000)
 
-    const { system, messages } = buildQuizPrompt(type, result.personality, result.scores)
+    const { system, messages } = buildQuizPrompt(type, result.personality, result.scores, i18n.language, t)
     sendMessage(system, messages)
       .then((res) => {
         const parsed = extractAIResult(res.raw)
@@ -58,9 +57,9 @@ export default function QuizResultPage() {
         } else {
           // Use fallback
           setAiResult({
-            title: result.personality.name,
-            description: result.personality.fallback,
-            tip: '做自己就好。',
+            title: t(result.personality.name),
+            description: t(result.personality.fallback),
+            tip: t('quiz.be_yourself'),
           })
         }
       })
@@ -68,9 +67,9 @@ export default function QuizResultPage() {
         setAiError(true)
         // Fallback
         setAiResult({
-          title: result.personality.name,
-          description: result.personality.fallback,
-          tip: '做自己就好。',
+          title: t(result.personality.name),
+          description: t(result.personality.fallback),
+          tip: t('quiz.be_yourself'),
         })
       })
       .finally(() => {
@@ -82,8 +81,7 @@ export default function QuizResultPage() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!quiz || !result) {
-    navigate('/quiz', { replace: true })
-    return null
+    return <Navigate to="/quiz" replace />
   }
 
   const { personality, scores } = result
@@ -97,7 +95,7 @@ export default function QuizResultPage() {
           <button onClick={() => navigate('/quiz')} className="text-[var(--muted)]">
             <span className="material-symbols-outlined">arrow_back</span>
           </button>
-          <h1 className="text-lg font-bold text-[var(--text)]">测试结果</h1>
+          <h1 className="text-lg font-bold text-[var(--text)]">{t('quiz.result')}</h1>
           <div className="w-6" />
         </div>
         <div className="h-[1px] w-full bg-gradient-to-r from-transparent via-[var(--primary)]/20 to-transparent" />
@@ -109,9 +107,9 @@ export default function QuizResultPage() {
         <div className="text-center mb-6">
           <div className="mb-3 flex justify-center"><QuizIcon id={personality.id} size={96} /></div>
           <h2 className="text-3xl font-black mb-2" style={{ color: personality.color }}>
-            {personality.name}
+            {t(personality.name)}
           </h2>
-          <p className="text-[var(--text-secondary)] text-sm">{personality.desc}</p>
+          <p className="text-[var(--text-secondary)] text-sm">{t(personality.desc)}</p>
         </div>
 
         {/* Radar Chart */}
@@ -119,7 +117,7 @@ export default function QuizResultPage() {
           <RadarChart
             dimensions={quiz.dimensions}
             scores={scores}
-            labels={quiz.dimensionLabels}
+            labels={Object.fromEntries(Object.entries(quiz.dimensionLabels).map(([k, v]) => [k, t(v)]))}
             color={personality.color}
           />
         </div>
@@ -155,7 +153,7 @@ export default function QuizResultPage() {
                 </div>
               )}
               {aiError && (
-                <p className="text-xs text-[var(--muted)] mt-2 text-center">AI 解读暂时不可用，已显示预设解读</p>
+                <p className="text-xs text-[var(--muted)] mt-2 text-center">{t('quiz.ai_unavailable')}</p>
               )}
             </div>
           ) : null}
@@ -170,7 +168,7 @@ export default function QuizResultPage() {
             style={{ background: `linear-gradient(135deg, ${personality.color}, ${personality.color}88)` }}
           >
             <span className="material-symbols-outlined text-sm align-middle mr-1">share</span>
-            生成分享图片
+            {t('quiz.share')}
           </button>
 
           <div className="grid grid-cols-2 gap-3">
@@ -178,13 +176,13 @@ export default function QuizResultPage() {
               onClick={() => navigate(`/quiz/${type}`, { replace: true })}
               className="py-3 rounded-2xl font-medium text-sm text-[var(--text)] bg-white/5 hover:bg-white/10 transition-colors"
             >
-              再测一次
+              {t('quiz.retake')}
             </button>
             <button
               onClick={() => navigate(`/quiz/${otherType}`)}
               className="py-3 rounded-2xl font-medium text-sm text-[var(--text)] bg-white/5 hover:bg-white/10 transition-colors"
             >
-              换一套测试
+              {t('quiz.try_other')}
             </button>
           </div>
         </div>
@@ -197,7 +195,7 @@ export default function QuizResultPage() {
           scores={scores}
           dimensions={quiz.dimensions}
           dimensionLabels={quiz.dimensionLabels}
-          quizTitle={quiz.title}
+          quizTitle={t(quiz.title)}
           aiResult={aiResult}
           onClose={() => setShowShare(false)}
         />

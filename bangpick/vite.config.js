@@ -118,7 +118,7 @@ function vercelApiPlugin() {
           console.log(`[api] body received for ${req.url} (${body.length} bytes)`)
           try {
             const mod = await import(`${fnPath}?t=${Date.now()}`)
-            const fakeReq = { method: req.method, body: body ? JSON.parse(body) : {}, headers: req.headers }
+            const fakeReq = { method: req.method, url: req.url, body: body ? JSON.parse(body) : {}, headers: req.headers }
             console.log(`[api] invoking ${fnName} with`, fakeReq.body)
             await mod.default(fakeReq, res)
             console.log(`[api] ${fnName} returned`)

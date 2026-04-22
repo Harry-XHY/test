@@ -10,7 +10,7 @@
     "api/chat.js": { "maxDuration": 300 },
     "api/cron-check-alerts.js": { "maxDuration": 60 },
     "api/cron-snapshot.js": { "maxDuration": 60 },
-    "api/food.js": { "maxDuration": 30 }
+    "api/food.js": { "maxDuration": 60 }
   },
   "crons": [
     { "path": "/api/cron-check-alerts", "schedule": "0 7 * * 1-5" },

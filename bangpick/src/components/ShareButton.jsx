@@ -1,14 +1,16 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { createShareLink, shareOrCopy } from '../lib/share'
 
 export default function ShareButton({ decision }) {
+  const { t } = useTranslation()
   const [status, setStatus] = useState('idle')
 
   async function handleShare() {
     setStatus('loading')
     try {
       const url = await createShareLink(decision)
-      const result = await shareOrCopy(url, decision.question)
+      const result = await shareOrCopy(url, decision.question, decision.type)
       setStatus(result)
       if (result === 'copied') {
         setTimeout(() => setStatus('idle'), 2000)
@@ -20,11 +22,11 @@ export default function ShareButton({ decision }) {
   }
 
   const labels = {
-    idle: '📤 分享给朋友',
-    loading: '生成链接...',
-    copied: '✓ 已复制链接',
-    shared: '✓ 已分享',
-    failed: '分享失败',
+    idle: t('share_btn.idle'),
+    loading: t('share_btn.loading'),
+    copied: t('share_btn.copied'),
+    shared: t('share_btn.shared'),
+    failed: t('share_btn.failed'),
   }
 
   return (

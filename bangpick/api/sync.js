@@ -9,6 +9,8 @@ const ALLOWED_KEYS = new Set([
   'snapshots',
   'alerts',
   'notifications', // server-written by cron-check-alerts; client clears after read
+  'dietaryProfile',
+  'foodVotes',
 ])
 
 // Soft cap on payload size to keep KV usage in check (per bucket).

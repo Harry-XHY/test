@@ -8,6 +8,11 @@ import RecommendationCard from '../components/RecommendationCard'
 import ChatInput from '../components/ChatInput'
 import { searchNearbyFood, getFoodDetail, getRecommendations } from '../lib/foodApi'
 import { detectCountry, detectCountryFromLang, getCountryConfig } from '../lib/countryConfig'
+import { getDietaryProfile, isProfileActive } from '../lib/dietaryProfile'
+import DietaryProfileModal from '../components/DietaryProfileModal'
+import FoodVoteModal from '../components/FoodVoteModal'
+import { createFoodVote } from '../lib/foodVote'
+import { useNavigate } from 'react-router-dom'
 
 export default function FoodPage() {
   const { t, i18n } = useTranslation()
@@ -29,6 +34,14 @@ export default function FoodPage() {
   const listRef = useRef(null)
   const [appHeight, setAppHeight] = useState('100%')
   const [keyboardOpen, setKeyboardOpen] = useState(false)
+  const [showDietaryModal, setShowDietaryModal] = useState(false)
+  const [dietaryProfile, setDietaryProfile] = useState(null)
+  const [showVoteModal, setShowVoteModal] = useState(false)
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    setDietaryProfile(getDietaryProfile())
+  }, [])
 
   useEffect(() => {
     const vv = window.visualViewport
@@ -83,7 +96,7 @@ export default function FoodPage() {
     navigator.geolocation.getCurrentPosition(
       (pos) => applyPosition(pos.coords.latitude, pos.coords.longitude),
       () => fallbackToIP(),
-      { enableHighAccuracy: true, timeout: 10000 }
+      { enableHighAccuracy: true, timeout: 5000 }
     )
   }, [])
 
@@ -188,6 +201,26 @@ export default function FoodPage() {
           </div>
           <div className="flex items-center gap-1.5">
             <LanguageSwitcher />
+            <button
+              onClick={() => setShowDietaryModal(true)}
+              className="w-8 h-8 rounded-lg grid place-items-center hover:bg-white/5 transition-colors relative"
+              style={{ color: '#52555c', border: '1px solid rgba(255,255,255,0.06)' }}
+            >
+              <span className="material-symbols-outlined text-[16px]">settings</span>
+              {isProfileActive(dietaryProfile) && (
+                <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              )}
+            </button>
+            {userPos && restaurants.length > 0 && (
+              <button
+                onClick={() => setShowVoteModal(true)}
+                className="w-8 h-8 rounded-lg grid place-items-center hover:bg-white/5 transition-colors"
+                style={{ color: '#52555c', border: '1px solid rgba(255,255,255,0.06)' }}
+                title={t('foodVote.btn')}
+              >
+                <span className="material-symbols-outlined text-[16px]">group</span>
+              </button>
+            )}
             {userPos && (
               <button
                 onClick={() => doSearch(userPos, '')}
@@ -365,6 +398,25 @@ export default function FoodPage() {
         )}
       </div>
 
+      <DietaryProfileModal
+        isOpen={showDietaryModal}
+        onClose={() => {
+          setShowDietaryModal(false)
+          setDietaryProfile(getDietaryProfile())
+        }}
+      />
+
+      <FoodVoteModal
+        isOpen={showVoteModal}
+        restaurants={restaurants}
+        onClose={() => setShowVoteModal(false)}
+        onCreate={({ restaurants, deadlineMinutes, question }) => {
+          const session = createFoodVote({ restaurants, deadlineMinutes, question })
+          setShowVoteModal(false)
+          navigate(`/food-vote/${session.id}`)
+        }}
+      />
+
       <ChatInput onSend={async (text) => {
         setSearchKeyword(text)
         setRecQuery(text)
@@ -377,12 +429,18 @@ export default function FoodPage() {
             nearbyList = await searchNearbyFood({ lat: userPos.lat, lon: userPos.lng, radius: 1500, language: i18n.language })
             setRestaurants(nearbyList)
           }
+          // Only send top 10 restaurants with minimal fields (server ignores the rest)
+          const trimmed = nearbyList.slice(0, 10).map(r => ({
+            placeId: r.placeId, name: r.name, cuisine: r.cuisine || r.types?.slice(0, 2).join(',') || '',
+            distance: r.distance, rating: r.rating, location: r.location, photos: r.photos?.slice(0, 1), source: r.source,
+          }))
           const recs = await getRecommendations({
             query: text,
-            restaurants: nearbyList,
+            restaurants: trimmed,
             lang: i18n.language,
             country: countryCode,
             currency: config.currency,
+            dietaryProfile,
           })
           setRecommendations(Array.isArray(recs) ? recs : [])
         } catch (err) {

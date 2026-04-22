@@ -1,6 +1,8 @@
-import { SECTORS } from '../lib/stockPrompts'
+import { useTranslation } from 'react-i18next'
+import { SECTORS, SECTOR_I18N_MAP } from '../lib/stockPrompts'
 
 export default function SectorChips({ onSelect, selected }) {
+  const { t } = useTranslation()
   return (
     <div className="flex flex-wrap gap-2">
       {SECTORS.map(sector => (
@@ -15,7 +17,7 @@ export default function SectorChips({ onSelect, selected }) {
             color: selected === sector ? '#b6a0ff' : '#a8abb3'
           }}
         >
-          {sector}
+          {t(SECTOR_I18N_MAP[sector])}
         </button>
       ))}
     </div>
